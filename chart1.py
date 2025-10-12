@@ -6,7 +6,7 @@ import matplotlib
 import numpy as np
 
 # 한글 폰트 설정 (macOS 기준)
-matplotlib.rc('font', family=['AppleGothic','DejaVu Sans'])
+matplotlib.rc('font', family=['AppleGothic','Malgun Gothic', 'NanumGothic','DejaVu Sans'])
 plt.rcParams['axes.unicode_minus'] = False
 
 st.sidebar.title("주가 데이터셋")
