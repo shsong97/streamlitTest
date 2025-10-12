@@ -1,2 +1,10 @@
+[server]
+enableStaticServing = true
+
+[[theme.fontFaces]]
+family="NanumGothic"
+url="app/static/NanumGothic.ttf"
+style="normal"
+
 [theme]
-font = "sans serif"
+font = "NanumGothic"
