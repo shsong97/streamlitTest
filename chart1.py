@@ -5,6 +5,13 @@ import matplotlib.pyplot as plt
 import matplotlib
 import numpy as np
 
+from matplotlib import font_manager, rc
+
+# 폰트 경로 지정
+font_path = 'static/NanumGothic.ttf'
+font_name = font_manager.FontProperties(fname=font_path).get_name()
+rc('font', family=font_name)
+
 # 한글 폰트 설정 (macOS 기준)
 matplotlib.rc('font', family=['NanumGothic'])
 plt.rcParams['axes.unicode_minus'] = False
