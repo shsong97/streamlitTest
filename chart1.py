@@ -13,7 +13,7 @@ st.sidebar.title("주가 데이터셋")
 
 
 # 두 종목 데이터 다운로드
-symbols = ['005930.KS', '000660.KS','033160.KS','033640.KS','222800.KS','240810.KS','064400.KS']
+symbols = ['005930.KS', '000660.KS','033160.KS','033640.KS','222800.KS','240810.KS','317450.KS','064400.KS']
 lables = ['삼성전자', 'SK하이닉스', '엠케이전자', '네패스', '심텍', '원익IPS','명인제약','LG씨엔에스']
 
 data = yf.download(symbols, period='6mo', auto_adjust=True)["Close"]
