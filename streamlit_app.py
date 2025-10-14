@@ -1,12 +1,4 @@
 import streamlit as st
-
-create_page = st.Page("pages/chartsearch.py", title="종목검색(1개월)", icon=":material/add_circle:")
-delete_page = st.Page("pages/chart6mo.py", title="6개월 차트 리스트", icon=":material/delete:")
-
-pg = st.navigation([create_page, delete_page])
-st.set_page_config(page_title="Data manager", page_icon=":material/edit:")
-pg.run()
-
 # 한글폰트 적용
 # 폰트 적용
 import os
@@ -22,3 +14,13 @@ def fontRegistered():
     fm._load_fontmanager(try_read_cache=False)
 
 fontRegistered()
+
+chartsearch = st.Page("pages/chartsearch.py", title="종목검색(1개월)", icon="➕")
+chart6mo = st.Page("pages/chart6mo.py", title="6개월 차트 리스트", icon="🗑️")
+irisdata = st.Page("sample/irisdata.py", title="아이리스 데이터", icon="🌸")
+streamlistteest = st.Page("sample/streamlittest.py", title="스트림리트 테스트", icon="📋")
+pdsample = st.Page("sample/pdsample.py", title="판다스 샘플", icon="📊")
+
+pg = st.navigation([chartsearch, chart6mo, irisdata, streamlistteest, pdsample])
+st.set_page_config(page_title="Data manager", page_icon="✏️")
+pg.run()

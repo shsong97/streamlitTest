@@ -8,7 +8,7 @@ import numpy as np
 matplotlib.rc('font', family=['NanumGothic'])
 plt.rcParams['axes.unicode_minus'] = False
 
-st.sidebar.title("주가 데이터셋")
+st.sidebar.title("6개월 주가 차트")
 
 
 # 두 종목 데이터 다운로드

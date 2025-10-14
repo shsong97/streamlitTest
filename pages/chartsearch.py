@@ -24,7 +24,7 @@ DEFAULT_STOCKS = {
     "명인제약": "317450.KS",
 }
 
-st.title("주식 1개월 차트")
+st.title("종목 1개월 차트")
 
 # 세션 상태에 종목 목록 저장 및 관리
 if "naver_stocks" not in st.session_state:
