@@ -1,3 +1,4 @@
+# streamlit_app_page_title: 차트 검색
 import streamlit as st
 import pandas as pd
 import yfinance as yf
@@ -15,6 +16,12 @@ DEFAULT_STOCKS = {
     "SK하이닉스": "000660.KS",
     "NAVER": "035420.KS",
     "카카오": "035720.KS",
+    "LG씨엔에스": "064400.KS",
+    "엠케이전자": "033160.KS",
+    "네패스": "033640.KS",
+    "심텍": "222800.KS",
+    "원익IPS": "240810.KS",
+    "명인제약": "317450.KS",
 }
 
 st.title("주식 1개월 차트")

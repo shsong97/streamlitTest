@@ -4,27 +4,6 @@ import matplotlib.pyplot as plt
 import matplotlib
 import numpy as np
 
-# 한글폰트 적용
-# 폰트 적용
-import os
-import matplotlib.font_manager as fm  # 폰트 관련 용도 as fm
-
-@st.cache_data
-def fontRegistered():
-    font_dirs = [os.getcwd() + '/static/']  # 폰트가 저장된 경로
-    font_files = fm.findSystemFonts(fontpaths=font_dirs)
-
-    for font_file in font_files:
-        fm.fontManager.addfont(font_file)
-    fm._load_fontmanager(try_read_cache=False)
-
-fontRegistered()
-
-# 폰트 경로 지정
-# font_path = 'static/NanumGothic.ttf'
-# font_name = font_manager.FontProperties(fname=font_path).get_name()
-# rc('font', family=font_name)
-
 # 한글 폰트 설정 (macOS 기준)
 matplotlib.rc('font', family=['NanumGothic'])
 plt.rcParams['axes.unicode_minus'] = False
