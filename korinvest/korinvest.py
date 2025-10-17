@@ -1,9 +1,17 @@
+import os
 import requests
+from dotenv import load_dotenv
 
-# 한국투자증권 OpenAPI 정보 입력
-APP_KEY = 'PSbTf1wtJHwrU3txN6bMQXYOinksGxZzBKP0'
-APP_SECRET = 'Qxbk2CWg6WQ4bdI58Mm5NgBggQoXOdxbjHmWnDFPq1OYw+CDhJUqHgvKEWlEyXRC/iYz24ImK6PoLUoRXNhk1s3q50rOHbRGH44C4IeNk07jB6QszK/JK9J89vqCFWWrUwgdl9HItsO4jgx7fBNuEmHqKyV+UcSVQWdh0O6A+TGDFm1kCHk='
-URL_BASE = 'https://openapi.koreainvestment.com:9443'
+# .env 로드
+load_dotenv()
+
+# 한국투자증권 OpenAPI 정보 (환경변수에서 읽음)
+APP_KEY = os.environ.get('KOREA_INVEST_APP_KEY')
+APP_SECRET = os.environ.get('KOREA_INVEST_APP_SECRET')
+URL_BASE = os.environ.get('KOREA_INVEST_URL_BASE', 'https://openapi.koreainvestment.com:9443')
+
+if not APP_KEY or not APP_SECRET:
+    raise RuntimeError('환경변수 KOREA_INVEST_APP_KEY 또는 KOREA_INVEST_APP_SECRET가 설정되어 있지 않습니다.')
 
 def get_access_token():
     url = f"{URL_BASE}/oauth2/tokenP"

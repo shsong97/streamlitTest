@@ -20,7 +20,8 @@ chart6mo = st.Page("pages/chart6mo.py", title="6개월 차트 리스트", icon="
 irisdata = st.Page("sample/irisdata.py", title="아이리스 데이터", icon="🌸")
 streamlistteest = st.Page("sample/streamlittest.py", title="스트림리트 테스트", icon="📋")
 pdsample = st.Page("sample/pdsample.py", title="판다스 샘플", icon="📊")
+loginauth = st.Page("pages/loginauth.py", title="로그인 인증", icon="🔒")
 
-pg = st.navigation([chartsearch, chart6mo, irisdata, streamlistteest, pdsample])
-st.set_page_config(page_title="Data manager", page_icon="✏️")
+pg = st.navigation([loginauth, chartsearch, chart6mo, irisdata, streamlistteest, pdsample])
+st.set_page_config(page_title="Streamlit을 이용한 데이터 분석", page_icon="🐳")
 pg.run()
