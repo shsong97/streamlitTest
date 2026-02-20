@@ -21,9 +21,17 @@ def get_access_token():
         "appkey": APP_KEY,
         "appsecret": APP_SECRET
     }
-    response = requests.post(url, headers=headers, data=data)
-    print(response.json())  # 응답 데이터 출력 (디버깅용)
-    return response.json()['access_token']
+    response = requests.post(url, headers=headers, data=data, timeout=10)
+    payload = response.json() if response.text else {}
+    print(payload)  # 응답 데이터 출력 (디버깅용)
+
+    token = payload.get('access_token')
+    if not token:
+        error_message = payload.get('error_description') or payload.get('msg1') or '토큰 발급 실패'
+        error_code = payload.get('error_code') or payload.get('msg_cd') or 'UNKNOWN'
+        raise RuntimeError(f"토큰 발급 실패 [{error_code}]: {error_message}")
+
+    return token
 
 def get_stock_rank(access_token):
     url = f"{URL_BASE}/uapi/domestic-stock/v1/quotations/inquire-trend-index"
@@ -43,7 +51,10 @@ def get_stock_rank(access_token):
     return response.json()
 
 def main():
+    print("한국투자증권 OpenAPI 테스트 시작")
+    print(f"APP_KEY: {APP_KEY[:4]}****, APP_SECRET: {APP_SECRET[:4]}****")  # 키 일부만 출력 (보안상)
     token = get_access_token()
+    print(f"발급된 토큰: {token[:10]}****")  # 토큰 일부만 출력 (보안상)
     data = get_stock_rank(token)
     for item in data.get('output', []):
         print(f"{item['hts_kor_isnm']} ({item['shrn_iscd']}): {item['fluc_rt']}%")

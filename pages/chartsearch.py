@@ -3,12 +3,10 @@ import streamlit as st
 import pandas as pd
 import yfinance as yf
 from datetime import datetime, timedelta
-import matplotlib
 import matplotlib.pyplot as plt
+from util.plotfont import apply_nanumgothic_font
 
-# 한글 폰트 설정 (macOS 기준)
-matplotlib.rc('font', family=['NanumGothic'])
-plt.rcParams['axes.unicode_minus'] = False
+apply_nanumgothic_font()
 
 # 네이버 주식 목록 예시 (실제 네이버 종목코드로 교체 필요)
 DEFAULT_STOCKS = {

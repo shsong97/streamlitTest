@@ -1,12 +1,10 @@
 import streamlit as st
 import yfinance as yf
 import matplotlib.pyplot as plt
-import matplotlib
 import numpy as np
+from util.plotfont import apply_nanumgothic_font
 
-# 한글 폰트 설정 (macOS 기준)
-matplotlib.rc('font', family=['NanumGothic'])
-plt.rcParams['axes.unicode_minus'] = False
+apply_nanumgothic_font()
 
 st.sidebar.title("6개월 주가 차트")
 

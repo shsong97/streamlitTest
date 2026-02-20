@@ -4,11 +4,9 @@ import streamlit as st
 import pandas as pd
 import requests
 import matplotlib.pyplot as plt
-import matplotlib
+from util.plotfont import apply_nanumgothic_font
 
-# 한글 폰트 설정
-matplotlib.rc('font', family=['NanumGothic','AppleGothic', 'DejaVu Sans'])
-plt.rcParams['axes.unicode_minus'] = False
+apply_nanumgothic_font()
 
 # .env 파일이 있으면 로드 (개발 환경)
 load_dotenv()
