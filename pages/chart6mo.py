@@ -17,7 +17,7 @@ data = yf.download(symbols, period='6mo', auto_adjust=True)["Close"]
 
 # 각 종목별로 개별 차트 그리기
 for code, label in zip(symbols, lables):
-    st.sidebar.link_button(label, f"https://finance.naver.com/item/sise.naver?code={code.split('.')[0]}")
+    st.sidebar.link_button(label, f"https://finance.naver.com/item/fchart.naver?code={code.split('.')[0]}")
     fig, ax = plt.subplots(figsize=(8, 4))
     ax.plot(data.index, data[code], label=label, color=np.random.rand(3,))
     ax.set_title(f'{label} 종가 차트')

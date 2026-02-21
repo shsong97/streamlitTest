@@ -13,7 +13,7 @@ def fontRegistered():
         fm.fontManager.addfont(font_file)
     fm._load_fontmanager(try_read_cache=False)
 
-fontRegistered()
+# fontRegistered()
 
 chartsearch = st.Page("pages/chartsearch.py", title="종목검색(1개월)", icon="➕")
 chart6mo = st.Page("pages/chart6mo.py", title="6개월 차트 리스트", icon="🗑️")

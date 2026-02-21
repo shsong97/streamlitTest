@@ -4,7 +4,7 @@ import os
 import json
 from typing import Tuple, Optional
 
-# /Users/songseunghun/Desktop/Dev/python/pages/loginauth.py
+# /pages/loginauth.py
 # Streamlit 기반 간단 로그인/회원가입 인증 예제
 # 파일 기반 사용자 저장 (users.json) + PBKDF2 해시
 

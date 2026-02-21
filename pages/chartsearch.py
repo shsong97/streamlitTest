@@ -56,3 +56,11 @@ if selected_stock:
         st.pyplot(fig)
     else:
         st.warning("데이터를 불러올 수 없습니다.")
+    
+    # yahoo에서 반환한 데이터프레임은 멀터 인덱스로 되어있어, 멀티인덱스 컬럼 해제해야 chart 그릴 때 오류가 안남
+    #df.columns = [col[0] for col in df.columns]
+
+    #st.dataframe(df[["Open", "High", "Low", "Close", "Volume"]])
+    #st.line_chart(df["Close"])
+    #st.bar_chart(df['Close'])
+    
