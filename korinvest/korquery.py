@@ -65,9 +65,10 @@ def get_stock_price(stock_code: str, retry: bool = True) -> dict:
         "tr_id": "FHKST01010400"  # 일별 시세 조회
     }
     params = {
-        "fid_cond_mrkt_div_code": "J",  # 주식
-        "fid_input_iscd": stock_code,
-        "fid_org_adj_prc": "0",  # 수정주가 사용 안함
+        "FID_COND_MRKT_DIV_CODE": "J",
+        "FID_INPUT_ISCD": stock_code,   # 삼성전자
+        "FID_PERIOD_DIV_CODE": "D",   # 필수값 (D/W/M/Y)
+        "FID_ORG_ADJ_PRC": "1",
     }
     
     try:
@@ -97,16 +98,33 @@ def get_stock_price(stock_code: str, retry: bool = True) -> dict:
     return data
 
 
-def print_stock_info(data: dict):
-    """API 응답 데이터를 보기좋게 출력합니다."""
-    if data.get('rt_cd') == '0':
-        output = data.get('output', {})
-        print(f"종목명: {output.get('hts_kor_isnm', 'N/A')}")
-        print(f"현재가: {output.get('stck_prpr', 'N/A')}원")
-        print(f"전일대비: {output.get('prdy_vrss', 'N/A')}원 ({output.get('prdy_ctrt', 'N/A')}%)")
-    else:
-        print(f"API 호출 실패: {data.get('msg1', '알 수 없는 오류')}")
+def print_stock_info(data):
+    output = data.get("output", {})
 
+    # output이 list인 경우 (inquire-daily-price 응답)
+    if isinstance(output, list):
+        if not output:
+            print("출력 데이터가 비어 있습니다.")
+            return
+
+        latest = output[0]  # 최신 데이터 1건
+        print(f"기준일자: {latest.get('stck_bsop_date', 'N/A')}")
+        print(f"시가: {latest.get('stck_oprc', 'N/A')}")
+        print(f"고가: {latest.get('stck_hgpr', 'N/A')}")
+        print(f"저가: {latest.get('stck_lwpr', 'N/A')}")
+        print(f"종가: {latest.get('stck_clpr', 'N/A')}")
+        print(f"거래량: {latest.get('acml_vol', 'N/A')}")
+        return
+
+    # output이 dict인 경우 (기존 로직 호환)
+    if isinstance(output, dict):
+        print(f"종목명: {output.get('hts_kor_isnm', 'N/A')}")
+        print(f"현재가: {output.get('stck_prpr', 'N/A')}")
+        print(f"전일대비: {output.get('prdy_vrss', 'N/A')}")
+        print(f"등락률: {output.get('prdy_ctrt', 'N/A')}")
+        return
+
+    print("알 수 없는 응답 형식입니다.")
 
 
 if __name__ == "__main__":
@@ -118,13 +136,15 @@ if __name__ == "__main__":
         print(f"URL_BASE: {URL_BASE}")
         print()
         
+
+        
         # 예제 1: 삼성전자 조회
         print("=== 삼성전자 주가 조회 ===")
         samsung_data = get_stock_price("005930")
         print_stock_info(samsung_data)
         
-        print("\n=== 원본 응답 (디버깅) ===")
-        print(json.dumps(samsung_data, indent=2, ensure_ascii=False))
+        # print("\n=== 원본 응답 (디버깅) ===")
+        # print(json.dumps(samsung_data, indent=2, ensure_ascii=False))
         
         # 예제 2: SK하이닉스 조회
         print("\n=== SK하이닉스 주가 조회 ===")

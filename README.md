@@ -1,22 +1,28 @@
-# Streamlit 학습자료
+# Project 설명
+- streamlit 을 사용하여 데이터 시각화를 연습한다.
+- dataframe을 다루는 방법을 학습한다.
 
-## Streamlit 기본 사용 방법
-
-### 기본사용방법
-
+## 설치
+### streamlit 참고 사이트
 🐶 Streamlit site : <https://streamlit.io>
 
-* pip / uv 를 이용해서 설치하기
+### 전체 설치
+```python
+pip install -r requirements.txt
+```
 
+### 개별 설치
 ```python
 pip install streamlit
+pip install scikit-learn
 ```
 
-* import 로 호출하기
-
+### requirements.txt 생성은 참고
 ```python
-import streamlit as st
+pip freeze > requirements.txt
 ```
+## 화면 개발
+- streamlit을 이용하여 화면 개발 방법을 확인한다.
 
 ### UI 화면 작성
 

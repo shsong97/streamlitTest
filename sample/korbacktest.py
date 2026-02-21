@@ -15,6 +15,7 @@ except ModuleNotFoundError:
 apply_nanumgothic_font()
 
 def _prepare_indicator_df(ticker_symbol):
+    """종목 데이터를 내려받아 백테스트용 보조지표(RSI, BB, MA, MFI, StochRSI)를 계산해 반환한다."""
     df = yf.download(ticker_symbol, period="1y", interval="1d", progress=False)
     if len(df) < 30:
         print(f"{ticker_symbol}: 데이터가 부족합니다.")
@@ -52,6 +53,7 @@ def _prepare_indicator_df(ticker_symbol):
         return None
 
     def _pick_bband_col(prefix: str) -> str:
+        """볼린저밴드 결과 컬럼 중 접두사(BBL/BBM/BBU)에 맞는 첫 컬럼명을 찾는다."""
         matches = [c for c in bbands.columns if c.startswith(prefix)]
         return matches[0] if matches else ""
 
@@ -87,17 +89,18 @@ def _prepare_indicator_df(ticker_symbol):
 
     return df
 
-def run_backtest_and_visualize(ticker_symbol, combos, sell_combos=None, plot_combo=None, plot_sell_combo=None):
+def run_backtest_and_visualize(ticker_symbol, buy_combos, sell_combos=None, hold_days=10):
+    """매수/매도 조합별 신호 성과를 계산하고, 발생한 전체 신호를 한 차트에 시각화한다."""
     df = _prepare_indicator_df(ticker_symbol)
     if df is None:
         return None
 
 
-    # 4. 수익률 계산 (매수 후 10거래일 뒤 매도 가정)
-    hold_days = 10
+    # 4. 수익률 계산 (매수 후 hold_days 거래일 뒤 매도 가정)
     df['Return'] = df['Close'].shift(-hold_days) / df['Close'] - 1
 
-    def _plot_signals(plot_df, signals_df, combo_name, sell_signals_df=None):
+    def _plot_signals(plot_df, buy_signals_df, sell_signals_df=None):
+        """가격/볼린저밴드/RSI와 함께 매수(▲), 매도(▼) 신호를 표시한다."""
         plt.style.use('seaborn-v0_8-darkgrid')
         fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(16, 10), sharex=True, gridspec_kw={'height_ratios': [3, 1]})
 
@@ -106,14 +109,14 @@ def run_backtest_and_visualize(ticker_symbol, combos, sell_combos=None, plot_com
         ax1.plot(plot_df.index, plot_df['BB_Middle'], label='BB Middle', color='orange', linestyle='--', linewidth=0.8)
         ax1.plot(plot_df.index, plot_df['BB_Lower'], label='BB Lower', color='grey', linestyle='--', linewidth=0.8)
 
-        if not signals_df.empty:
-            ax1.scatter(signals_df.index, signals_df['Low'], 
+        if not buy_signals_df.empty:
+            ax1.scatter(buy_signals_df.index, buy_signals_df['Low'], 
                         marker='^', s=200, color='green', alpha=0.7, label='Buy Signal', zorder=5)
         if sell_signals_df is not None and not sell_signals_df.empty:
             ax1.scatter(sell_signals_df.index, sell_signals_df['High'], 
                         marker='v', s=200, color='red', alpha=0.7, label='Sell Signal', zorder=6)
 
-        ax1.set_title(f'{ticker_symbol} Price Chart ({combo_name})', fontsize=16)
+        ax1.set_title(f'{ticker_symbol} Price Chart', fontsize=16)
         ax1.set_ylabel('Price', fontsize=12)
         ax1.legend()
         ax1.grid(True)
@@ -132,8 +135,9 @@ def run_backtest_and_visualize(ticker_symbol, combos, sell_combos=None, plot_com
 
     # 5. 여러 조합 결과 요약
     results = {}
-    plot_buy_signals = None
-    for combo in combos:
+    buy_signal_frames = []
+    buy_hit_combo_names = []
+    for combo in buy_combos:
         name = combo['name']
         signal = combo['signal'](df)
         df['Signal'] = signal
@@ -150,13 +154,15 @@ def run_backtest_and_visualize(ticker_symbol, combos, sell_combos=None, plot_com
         else:
             print(f"\n[{ticker_symbol}] 조합: {name} - 신호 없음")
 
-        if plot_combo and plot_combo == name:
-            plot_buy_signals = signals
-            if not plot_sell_combo:
-                _plot_signals(df, signals, name)
+        if signals.empty:
+            continue
+
+        buy_signal_frames.append(signals)
+        buy_hit_combo_names.append(name)
 
     # 6. 매도 신호 조합 결과 요약
-    plot_sell_signals = None
+    sell_signal_frames = []
+    sell_hit_combo_names = []
     if sell_combos:
         for sell_combo in sell_combos:
             name = sell_combo['name']
@@ -167,25 +173,29 @@ def run_backtest_and_visualize(ticker_symbol, combos, sell_combos=None, plot_com
             if not sell_signals.empty:
                 print(f"\n[{ticker_symbol}] 매도 조합: {name}")
                 print(f"  총 신호 발생 횟수: {len(sell_signals)}회")
+                sell_signal_frames.append(sell_signals)
+                sell_hit_combo_names.append(name)
             else:
                 print(f"\n[{ticker_symbol}] 매도 조합: {name} - 신호 없음")
 
-            if plot_sell_combo and plot_sell_combo == name:
-                plot_sell_signals = sell_signals
-                if not plot_combo:
-                    _plot_signals(df, pd.DataFrame(), f"Sell Only: {name}", sell_signals)
+    all_buy_signals = pd.concat(buy_signal_frames).sort_index() if buy_signal_frames else pd.DataFrame()
+    all_sell_signals = pd.concat(sell_signal_frames).sort_index() if sell_signal_frames else pd.DataFrame()
 
-    if plot_combo and plot_sell_combo and plot_buy_signals is not None and plot_sell_signals is not None:
-        _plot_signals(
-            df,
-            plot_buy_signals,
-            f"{plot_combo} / {plot_sell_combo}",
-            plot_sell_signals,
-        )
+    if not all_buy_signals.empty:
+        all_buy_signals = all_buy_signals[~all_buy_signals.index.duplicated(keep='first')]
+    if not all_sell_signals.empty:
+        all_sell_signals = all_sell_signals[~all_sell_signals.index.duplicated(keep='first')]
+
+    _plot_signals(df, all_buy_signals, all_sell_signals if not all_sell_signals.empty else None)
+    print(
+        f"시각화 완료 - 매수 조합({', '.join(buy_hit_combo_names) if buy_hit_combo_names else '없음'}), "
+        f"매도 조합({', '.join(sell_hit_combo_names) if sell_hit_combo_names else '없음'})"
+    )
 
     return results
 
 def scan_stock_list(korstr, buy_combos, sell_combos=None, kospi_count=10, recent_days=10):
+    """시가총액 상위 종목을 스캔해 최근 기간 내 매수/매도 신호가 나온 종목만 요약 반환한다."""
     df_krx = fdr.StockListing(korstr)
     mcap_col = next((col for col in ['MarCap', 'Marcap', 'MarketCap'] if col in df_krx.columns), None)
     if not mcap_col:
@@ -303,25 +313,25 @@ if __name__ == "__main__":
         },
     ]
 
-    # run_backtest_and_visualize(
-    #     "000100.KS",
-    #     combos=buy_combos,
-    #     sell_combos=sell_combos,
-    #     plot_combo="BB 중단 돌파 매수",
+    run_backtest_and_visualize(
+        "196170.KQ",
+        buy_combos=buy_combos,
+        sell_combos=sell_combos,
+        hold_days=5,
+    )
+
+    # scan_stock_list(
+    #     korstr="KOSPI",
+    #     buy_combos=buy_combos,
+    #     sell_combos=None,
+    #     kospi_count=100,
+    #     recent_days=5,
     # )
 
-    scan_stock_list(
-        korstr="KOSPI",
-        buy_combos=buy_combos,
-        sell_combos=None,
-        kospi_count=100,
-        recent_days=5,
-    )
-
-    scan_stock_list(
-        korstr="KOSDAQ",
-        buy_combos=buy_combos,
-        sell_combos=None,
-        kospi_count=100,
-        recent_days=5,
-    )
+    # scan_stock_list(
+    #     korstr="KOSDAQ",
+    #     buy_combos=buy_combos,
+    #     sell_combos=None,
+    #     kospi_count=100,
+    #     recent_days=5,
+    # )
