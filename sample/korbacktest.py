@@ -87,6 +87,14 @@ def _prepare_indicator_df(ticker_symbol):
         df['K'] = stoch_rsi['STOCHRSIk_14_14_3_3']
         df['D'] = stoch_rsi['STOCHRSId_14_14_3_3']
 
+    # MACD 및 Signal 계산
+    macd = ta.macd(df['Close'], fast=12, slow=26, signal=9)
+    if macd is not None and not macd.empty:
+        df['MACD'] = macd['MACD_12_26_9']
+        df['MACD_Signal'] = macd['MACDs_12_26_9']
+    else:
+        df['MACD'] = pd.Series(index=df.index, dtype="float64")
+        df['MACD_Signal'] = pd.Series(index=df.index, dtype="float64")
     return df
 
 def run_backtest_and_visualize(ticker_symbol, buy_combos, sell_combos=None, hold_days=10):
@@ -137,12 +145,14 @@ def run_backtest_and_visualize(ticker_symbol, buy_combos, sell_combos=None, hold
     results = {}
     buy_signal_frames = []
     buy_hit_combo_names = []
+    signal_counts = []
     for combo in buy_combos:
         name = combo['name']
         signal = combo['signal'](df)
         df['Signal'] = signal
         signals = df[df['Signal'] == True].copy()
         results[name] = signals[['Close', 'RSI', 'Return']]
+        signal_counts.append((name, len(signals)))
 
         if not signals.empty:
             win_rate = (signals['Return'] > 0).mean() * 100
@@ -159,6 +169,12 @@ def run_backtest_and_visualize(ticker_symbol, buy_combos, sell_combos=None, hold
 
         buy_signal_frames.append(signals)
         buy_hit_combo_names.append(name)
+
+    # 신호 발생 많은 순으로 정렬
+    signal_counts_sorted = sorted(signal_counts, key=lambda x: x[1], reverse=True)
+    print("\n[매수 시그널 발생 많은 순 정렬 결과]")
+    for name, count in signal_counts_sorted:
+        print(f"  {name}: {count}회")
 
     # 6. 매도 신호 조합 결과 요약
     sell_signal_frames = []
@@ -203,6 +219,7 @@ def scan_stock_list(korstr, buy_combos, sell_combos=None, kospi_count=10, recent
     top_list = df_krx.sort_values(by=mcap_col, ascending=False).head(kospi_count)
 
     results = []
+    num_count=0;
     for _, row in top_list.iterrows():
         symbol, name = row['Code'], row['Name']
         if korstr == "KOSPI":
@@ -212,6 +229,8 @@ def scan_stock_list(korstr, buy_combos, sell_combos=None, kospi_count=10, recent
         else:
             ticker = symbol
 
+        num_count += 1
+        print(f"Scanning {num_count} : {ticker} ({name})")
         df = _prepare_indicator_df(ticker)
         if df is None:
             continue
@@ -249,16 +268,22 @@ def scan_stock_list(korstr, buy_combos, sell_combos=None, kospi_count=10, recent
                 "sell_date": last_sell,
             })
 
-    print(f"Stock {kospi_count} scan complete: hits={len(results)}")
+    print(f"{korstr} Stock {kospi_count} scan complete: hits={len(results)}")
     if not results:
         print("최근 조건에 해당하는 종목이 없습니다.")
         return pd.DataFrame(columns=["ticker", "name", "buy_signal", "buy_date", "sell_signal", "sell_date"])
 
     result_df = pd.DataFrame(results)
-    result_df = result_df.sort_values(by=["buy_date", "sell_date"], ascending=False)
-    print("\n[Stock스캔 결과]")
-    print(result_df.to_string(index=False))
-    return result_df
+    # buy_signal이 많은 순으로 정렬
+    def count_buy_signals(row):
+        if row['buy_signal'] == '-' or not row['buy_signal']:
+            return 0
+        return len(row['buy_signal'].split(','))
+    result_df['buy_signal_count'] = result_df.apply(count_buy_signals, axis=1)
+    result_df = result_df.sort_values(by=['buy_signal_count', 'buy_date', 'sell_date'], ascending=[False, False, False])
+    print(f"\n[{korstr} Stock 스캔 결과]")
+    print(result_df.drop(columns=['buy_signal_count']).to_string(index=False))
+    return result_df.drop(columns=['buy_signal_count'])
 
 # 테스트 (삼성전자: 005930.KS / 애플: AAPL / 엘앤에프: 066970.KQ)
 # 000660: SK하이닉스
@@ -285,9 +310,8 @@ if __name__ == "__main__":
                                & (d['Close'] > d['Open']),
         },
         {
-            "name": "MFI + StochRSI 골든크로스 + MA 골든크로스",
-            "signal": lambda d: (d['MFI'] < 25)
-                               & (d['K'] > d['D'])
+            "name": "StochRSI 골든크로스 + MA 골든크로스",
+            "signal": lambda d: (d['K'] > d['D'])
                                & (d['K'].shift(1) <= d['D'].shift(1))
                                & (d['MA_5'] > d['MA_20'])
                                & (d['MA_5'].shift(1) <= d['MA_20'].shift(1)),
@@ -299,6 +323,16 @@ if __name__ == "__main__":
                                & (d['Close'] >= d['MA_20'])
                                & (d['Volume'] <= d['Vol_Avg'])
                                & (d['Close'] > d['Open']),
+        },
+        {
+            "name": "관심바닥",
+            "signal": lambda d: (d['RSI'] <=55)
+                                & (d['Close'] >= d['MA_5'])
+                                & (d['Close'] > d['Open']),
+        },
+        {
+            "name": "MACD 돌파 매수",
+            "signal": lambda d: (d['MACD'] > d['MACD_Signal']) & (d['MACD'].shift(1) <= d['MACD_Signal'].shift(1)),
         },
     ]
 
@@ -313,12 +347,20 @@ if __name__ == "__main__":
         },
     ]
 
-    run_backtest_and_visualize(
-        "196170.KQ",
+    scan_stock_list(
+        korstr="KOSPI",
         buy_combos=buy_combos,
-        sell_combos=sell_combos,
-        hold_days=5,
+        sell_combos=None,
+        kospi_count=20,
+        recent_days=5,
     )
+
+    # run_backtest_and_visualize(
+    #     "424870.KQ",  
+    #     buy_combos=buy_combos,
+    #     sell_combos=sell_combos,
+    #     hold_days=5,
+    # )
 
     # scan_stock_list(
     #     korstr="KOSPI",
