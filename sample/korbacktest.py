@@ -3,16 +3,28 @@ import pandas as pd
 import pandas_ta as ta
 import FinanceDataReader as fdr
 import matplotlib.pyplot as plt
+import mplcursors
 import sys
 from pathlib import Path
 
-try:
-    from util.plotfont import apply_nanumgothic_font
-except ModuleNotFoundError:
-    sys.path.append(str(Path(__file__).resolve().parents[1]))
-    from util.plotfont import apply_nanumgothic_font
-
-apply_nanumgothic_font()
+import matplotlib
+import matplotlib.font_manager as fm
+from matplotlib import font_manager as fm
+font_candidates = [
+    "NanumGothic", "Nanum Gothic", "Apple SD Gothic Neo", "AppleGothic", "BM Jua", "BM Hanna", "BM Kirang Haerang", "Malgun Gothic", "Noto Sans KR", "Noto Sans CJK KR"
+]
+found_font = None
+for font_name in font_candidates:
+    matches = [f for f in fm.fontManager.ttflist if font_name in f.name]
+    if matches:
+        found_font = matches[0]
+        break
+if found_font:
+    font_prop = fm.FontProperties(fname=found_font.fname)
+    matplotlib.rcParams['font.family'] = font_prop.get_name()
+    matplotlib.rcParams['font.sans-serif'] = [font_prop.get_name()]
+else:
+    font_prop = None
 
 def _prepare_indicator_df(ticker_symbol):
     """종목 데이터를 내려받아 백테스트용 보조지표(RSI, BB, MA, MFI, StochRSI)를 계산해 반환한다."""
@@ -107,36 +119,90 @@ def run_backtest_and_visualize(ticker_symbol, buy_combos, sell_combos=None, hold
     # 4. 수익률 계산 (매수 후 hold_days 거래일 뒤 매도 가정)
     df['Return'] = df['Close'].shift(-hold_days) / df['Close'] - 1
 
-    def _plot_signals(plot_df, buy_signals_df, sell_signals_df=None):
-        """가격/볼린저밴드/RSI와 함께 매수(▲), 매도(▼) 신호를 표시한다."""
-        plt.style.use('seaborn-v0_8-darkgrid')
-        fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(16, 10), sharex=True, gridspec_kw={'height_ratios': [3, 1]})
 
+    def _plot_signals(plot_df, buy_signals_df, sell_signals_df=None):
+        """가격/볼린저밴드/RSI/MACD와 함께 매수(▲), 매도(▼) 신호를 표시하고, 신호 이름도 함께 표시한다."""
+        plt.style.use('seaborn-v0_8-darkgrid')
+        fig, (ax1, ax2, ax3) = plt.subplots(3, 1, figsize=(16, 14), sharex=True, gridspec_kw={'height_ratios': [3, 1, 1]})
+
+        # 가격 및 볼린저밴드
         ax1.plot(plot_df.index, plot_df['Close'], label='Close Price', color='blue', linewidth=1)
         ax1.plot(plot_df.index, plot_df['BB_Upper'], label='BB Upper', color='grey', linestyle='--', linewidth=0.8)
         ax1.plot(plot_df.index, plot_df['BB_Middle'], label='BB Middle', color='orange', linestyle='--', linewidth=0.8)
         ax1.plot(plot_df.index, plot_df['BB_Lower'], label='BB Lower', color='grey', linestyle='--', linewidth=0.8)
 
-        if not buy_signals_df.empty:
-            ax1.scatter(buy_signals_df.index, buy_signals_df['Low'], 
-                        marker='^', s=200, color='green', alpha=0.7, label='Buy Signal', zorder=5)
-        if sell_signals_df is not None and not sell_signals_df.empty:
-            ax1.scatter(sell_signals_df.index, sell_signals_df['High'], 
-                        marker='v', s=200, color='red', alpha=0.7, label='Sell Signal', zorder=6)
 
-        ax1.set_title(f'{ticker_symbol} Price Chart', fontsize=16)
+        # 매수 신호 마커 및 hover 툴팁
+        buy_scatter = None
+        buy_annotations = []
+        if not buy_signals_df.empty:
+            buy_scatter = ax1.scatter(buy_signals_df.index, buy_signals_df['Low'], marker='^', s=200, color='green', alpha=0.7, label='Buy Signal', zorder=5)
+            buy_annotations = buy_signals_df['Signal_Name'].tolist() if 'Signal_Name' in buy_signals_df.columns else ['']*len(buy_signals_df)
+
+        # 매도 신호 마커 및 hover 툴팁
+        sell_scatter = None
+        sell_annotations = []
+        if sell_signals_df is not None and not sell_signals_df.empty:
+            sell_scatter = ax1.scatter(sell_signals_df.index, sell_signals_df['High'], marker='v', s=200, color='red', alpha=0.7, label='Sell Signal', zorder=6)
+            sell_annotations = sell_signals_df['Signal_Name'].tolist() if 'Signal_Name' in sell_signals_df.columns else ['']*len(sell_signals_df)
+
+        # mplcursors로 hover 시 신호명 표시
+        if buy_scatter is not None and font_prop is not None:
+            cursor_buy = mplcursors.cursor(buy_scatter, hover=True)
+            @cursor_buy.connect("add")
+            def on_add_buy(sel):
+                idx = sel.index
+                if idx is not None and idx < len(buy_annotations):
+                    sel.annotation.set_text(buy_annotations[idx])
+                    try:
+                        sel.annotation.set_fontproperties(font_prop)
+                    except Exception:
+                        pass
+        if sell_scatter is not None and font_prop is not None:
+            cursor_sell = mplcursors.cursor(sell_scatter, hover=True)
+            @cursor_sell.connect("add")
+            def on_add_sell(sel):
+                idx = sel.index
+                if idx is not None and idx < len(sell_annotations):
+                    sel.annotation.set_text(sell_annotations[idx])
+                    try:
+                        sel.annotation.set_fontproperties(font_prop)
+                    except Exception:
+                        pass
+
+        # ticker_symbol이 "005930.KS"와 같이 코드만 있을 때 이름을 붙여서 표시
+        stock_name = None
+        if hasattr(plot_df, 'attrs') and 'stock_name' in plot_df.attrs:
+            stock_name = plot_df.attrs['stock_name']
+        elif 'Name' in plot_df.columns:
+            stock_name = plot_df['Name'].iloc[0]
+        # run_backtest_and_visualize에서 이름을 전달받지 못하면 ticker_symbol만 표시
+        title_str = f'{ticker_symbol}'
+        if stock_name:
+            title_str += f' ({stock_name})'
+        title_str += ' Price Chart'
+        ax1.set_title(title_str, fontsize=16)
         ax1.set_ylabel('Price', fontsize=12)
         ax1.legend()
         ax1.grid(True)
 
+        # RSI
         ax2.plot(plot_df.index, plot_df['RSI'], label='RSI (14)', color='purple', linewidth=1)
         ax2.axhline(30, linestyle='--', color='red', alpha=0.7, label='RSI 30 (Oversold)')
         ax2.axhline(70, linestyle='--', color='blue', alpha=0.7, label='RSI 70 (Overbought)')
         ax2.axhline(35, linestyle=':', color='gray', alpha=0.7, label='RSI 35 (Condition)')
         ax2.set_ylabel('RSI', fontsize=12)
-        ax2.set_xlabel('Date', fontsize=12)
         ax2.legend()
         ax2.grid(True)
+
+        # MACD & Signal
+        ax3.plot(plot_df.index, plot_df['MACD'], label='MACD', color='black', linewidth=1)
+        ax3.plot(plot_df.index, plot_df['MACD_Signal'], label='MACD Signal', color='red', linewidth=1)
+        ax3.axhline(0, linestyle='--', color='gray', alpha=0.7)
+        ax3.set_ylabel('MACD', fontsize=12)
+        ax3.set_xlabel('Date', fontsize=12)
+        ax3.legend()
+        ax3.grid(True)
 
         plt.tight_layout()
         plt.show()
@@ -151,7 +217,8 @@ def run_backtest_and_visualize(ticker_symbol, buy_combos, sell_combos=None, hold
         signal = combo['signal'](df)
         df['Signal'] = signal
         signals = df[df['Signal'] == True].copy()
-        results[name] = signals[['Close', 'RSI', 'Return']]
+        signals['Signal_Name'] = name  # 신호명 컬럼 추가
+        results[name] = signals[['Close', 'RSI', 'Return', 'Signal_Name']]
         signal_counts.append((name, len(signals)))
 
         if not signals.empty:
@@ -185,6 +252,7 @@ def run_backtest_and_visualize(ticker_symbol, buy_combos, sell_combos=None, hold
             sell_signal = sell_combo['signal'](df)
             df['Sell_Signal'] = sell_signal
             sell_signals = df[df['Sell_Signal'] == True].copy()
+            sell_signals['Signal_Name'] = name  # 신호명 컬럼 추가
 
             if not sell_signals.empty:
                 print(f"\n[{ticker_symbol}] 매도 조합: {name}")
@@ -219,7 +287,7 @@ def scan_stock_list(korstr, buy_combos, sell_combos=None, kospi_count=10, recent
     top_list = df_krx.sort_values(by=mcap_col, ascending=False).head(kospi_count)
 
     results = []
-    num_count=0;
+    num_count=0
     for _, row in top_list.iterrows():
         symbol, name = row['Code'], row['Name']
         if korstr == "KOSPI":
@@ -285,8 +353,49 @@ def scan_stock_list(korstr, buy_combos, sell_combos=None, kospi_count=10, recent
     print(result_df.drop(columns=['buy_signal_count']).to_string(index=False))
     return result_df.drop(columns=['buy_signal_count'])
 
-# 테스트 (삼성전자: 005930.KS / 애플: AAPL / 엘앤에프: 066970.KQ)
-# 000660: SK하이닉스
+# 종목 리스트를 받아 매도 신호만 스캔하는 함수
+def scan_sell_signal_list(stock_list, sell_combos=None, recent_days=10):
+    """입력된 종목 리스트에서 최근 기간 내 매도 신호가 나온 종목만 요약 반환한다."""
+    results = []
+    num_count = 0
+    for ticker in stock_list:
+        num_count += 1
+        print(f"Scanning {num_count} : {ticker}")
+        df = _prepare_indicator_df(ticker)
+        if df is None:
+            continue
+
+        sell_dates = []
+        sell_combo_names = []
+        if sell_combos:
+            for sell_combo in sell_combos:
+                sell_signal = sell_combo['signal'](df)
+                recent_hits = sell_signal.tail(recent_days)
+                hits = list(recent_hits[recent_hits].index)
+                if hits:
+                    sell_dates.extend(hits)
+                    sell_combo_names.append(sell_combo['name'])
+
+        if sell_dates:
+            last_sell = max(sell_dates).date().isoformat() if sell_dates else "-"
+            results.append({
+                "ticker": ticker,
+                "sell_signal": ", ".join(sell_combo_names) if sell_combo_names else "-",
+                "sell_date": last_sell,
+            })
+
+    print(f"Stock list scan complete: hits={len(results)}")
+    if not results:
+        print("최근 조건에 해당하는 종목이 없습니다.")
+        return pd.DataFrame(columns=["ticker", "sell_signal", "sell_date"])
+
+    result_df = pd.DataFrame(results)
+    result_df = result_df.sort_values(by=["sell_date"], ascending=False)
+    print(f"\n[매도 신호 스캔 결과]")
+    print(result_df.to_string(index=False))
+    return result_df
+
+
 if __name__ == "__main__":
     
 
@@ -326,13 +435,26 @@ if __name__ == "__main__":
         },
         {
             "name": "관심바닥",
-            "signal": lambda d: (d['RSI'] <=55)
+            "signal": lambda d: (d['RSI'] <=50)
                                 & (d['Close'] >= d['MA_5'])
                                 & (d['Close'] > d['Open']),
         },
         {
             "name": "MACD 돌파 매수",
-            "signal": lambda d: (d['MACD'] > d['MACD_Signal']) & (d['MACD'].shift(1) <= d['MACD_Signal'].shift(1)),
+            "signal": lambda d: (d['MACD'] > d['MACD_Signal']) 
+                                & (d['MACD'].shift(1) <= d['MACD_Signal'].shift(1))
+                                & (d['MACD'] < 0),  # MACD가 음수 영역에서 Signal을 돌파할 때만 매수
+        },
+        {
+            "name": "매수타임", 
+            "signal": lambda d: (d['Close'] > d['BB_Middle'])
+                            & (d['MACD'] > d['MACD_Signal'])
+                            & (d['RSI'] >= 40) & (d['RSI'] <= 60)
+                            & (d['Close'] > d['Open'])
+                            & (d['Close'] <= d['BB_Lower']) & (d['RSI'] > 30)
+                            & (d['Close'].shift(1) > d['Open'].shift(1))  # 오늘과 어제 모두 양봉인 경우로 조건 강화
+                            & (d['Volume'] > d['Volume'].shift(1)),  # 오늘 거래량이 어제보다 많은 경우로 조건 강화
+
         },
     ]
 
@@ -347,33 +469,38 @@ if __name__ == "__main__":
         },
     ]
 
-    scan_stock_list(
-        korstr="KOSPI",
-        buy_combos=buy_combos,
-        sell_combos=None,
-        kospi_count=20,
-        recent_days=5,
-    )
-
+    # 특정 종목에 대해 백테스트 실행 및 시각화
     # run_backtest_and_visualize(
-    #     "424870.KQ",  
+    #     "221800.KQ",  
     #     buy_combos=buy_combos,
     #     sell_combos=sell_combos,
     #     hold_days=5,
     # )
 
-    # scan_stock_list(
-    #     korstr="KOSPI",
-    #     buy_combos=buy_combos,
-    #     sell_combos=None,
-    #     kospi_count=100,
-    #     recent_days=5,
+    import time
+    start_time = time.time()
+
+    # 매수 종목을 스캔해 최근 신호가 나온 종목 리스트를 출력
+    scan_stock_list(
+        korstr="KOSPI", # "KOSPI" 또는 "KOSDAQ"
+        buy_combos=[combo for combo in buy_combos if combo["name"]=="매수타임"],
+        sell_combos=None,
+        kospi_count=500,
+        recent_days=3,
+    )
+
+    # 매입종목 리스트를 넣고 매도신호를 포착
+    # scan_sell_signal_list(
+    #     stock_list=["005930.KS", "000660.KS", "035420.KS"],  # 예시 종목 리스트
+    #     sell_combos=sell_combos,
+    #     recent_days=3,
     # )
 
-    # scan_stock_list(
-    #     korstr="KOSDAQ",
-    #     buy_combos=buy_combos,
-    #     sell_combos=None,
-    #     kospi_count=100,
-    #     recent_days=5,
-    # )
+    end_time = time.time()
+    elapsed = end_time - start_time
+    print(f"\n총 실행 시간: {elapsed:.2f}초")
+
+    # macbook 에서 완료 후 비프음 출력(백그라운드로 작업을 하면 사용자가 알수 없어 알림음 추가)
+    import os
+    # os.system('say "끝났습니다"')
+
