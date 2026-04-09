@@ -396,78 +396,88 @@ def scan_sell_signal_list(stock_list, sell_combos=None, recent_days=10):
     return result_df
 
 
-if __name__ == "__main__":
     
 
-    buy_combos = [
-        {
-            "name": "BB 중단 돌파 매수",
-            "signal": lambda d: (d['Close'] > d['BB_Middle'])
-                            & (d['Close'].shift(1) <= d['BB_Middle'].shift(1))
-                            & (d['Close'] > d['Open'])
-                            & (d['Volume'] > d['Vol_Avg']),
-        },
-        {
-            "name": "BB 하단 터치",
-            "signal": lambda d: (d['Low'] <= d['BB_Lower']),
-        },
-        {
-            "name": "RSI35 + BB + 거래량",
-            "signal": lambda d: (d['RSI'] <= 35)
-                               & (d['Low'] <= d['BB_Lower'])
-                               & (d['Volume'] > d['Vol_Avg'] * 1.5)
-                               & (d['Close'] > d['Open']),
-        },
-        {
-            "name": "StochRSI 골든크로스 + MA 골든크로스",
-            "signal": lambda d: (d['K'] > d['D'])
-                               & (d['K'].shift(1) <= d['D'].shift(1))
-                               & (d['MA_5'] > d['MA_20'])
-                               & (d['MA_5'].shift(1) <= d['MA_20'].shift(1)),
-        },
-        {
-            "name": "단타 눌림목",
-            "signal": lambda d: (d['RSI'].rolling(5).max().shift(1) >= 70)
-                               & (d['RSI'] >= 40) & (d['RSI'] <= 55)
-                               & (d['Close'] >= d['MA_20'])
-                               & (d['Volume'] <= d['Vol_Avg'])
-                               & (d['Close'] > d['Open']),
-        },
-        {
-            "name": "관심바닥",
-            "signal": lambda d: (d['RSI'] <=50)
-                                & (d['Close'] >= d['MA_5'])
-                                & (d['Close'] > d['Open']),
-        },
-        {
-            "name": "MACD 돌파 매수",
-            "signal": lambda d: (d['MACD'] > d['MACD_Signal']) 
-                                & (d['MACD'].shift(1) <= d['MACD_Signal'].shift(1))
-                                & (d['MACD'] < 0),  # MACD가 음수 영역에서 Signal을 돌파할 때만 매수
-        },
-        {
-            "name": "매수타임", 
-            "signal": lambda d: (d['Close'] > d['BB_Middle'])
-                            & (d['MACD'] > d['MACD_Signal'])
-                            & (d['RSI'] >= 40) & (d['RSI'] <= 60)
-                            & (d['Close'] > d['Open'])
-                            & (d['Close'] <= d['BB_Lower']) & (d['RSI'] > 30)
-                            & (d['Close'].shift(1) > d['Open'].shift(1))  # 오늘과 어제 모두 양봉인 경우로 조건 강화
-                            & (d['Volume'] > d['Volume'].shift(1)),  # 오늘 거래량이 어제보다 많은 경우로 조건 강화
+buy_combos = [
+    {
+        "name": "BB 중단 돌파 매수",
+        "signal": lambda d: (d['Close'] > d['BB_Middle'])
+                        & (d['Close'].shift(1) <= d['BB_Middle'].shift(1))
+                        & (d['Close'] > d['Open'])
+                        & (d['Volume'] > d['Vol_Avg']),
+    },
+    {
+        "name": "BB 하단 터치",
+        "signal": lambda d: (d['Low'] <= d['BB_Lower']),
+    },
+    {
+        "name": "RSI35 + BB + 거래량",
+        "signal": lambda d: (d['RSI'] <= 35)
+                            & (d['Low'] <= d['BB_Lower'])
+                            & (d['Volume'] > d['Vol_Avg'] * 1.5)
+                            & (d['Close'] > d['Open']),
+    },
+    {
+        "name": "StochRSI 골든크로스 + MA 골든크로스",
+        "signal": lambda d: (d['K'] > d['D'])
+                            & (d['K'].shift(1) <= d['D'].shift(1))
+                            & (d['MA_5'] > d['MA_20'])
+                            & (d['MA_5'].shift(1) <= d['MA_20'].shift(1)),
+    },
+    {
+        "name": "단타 눌림목",
+        "signal": lambda d: (d['RSI'].rolling(5).max().shift(1) >= 70)
+                            & (d['RSI'] >= 40) & (d['RSI'] <= 55)
+                            & (d['Close'] >= d['MA_20'])
+                            & (d['Volume'] <= d['Vol_Avg'])
+                            & (d['Close'] > d['Open']),
+    },
+    {
+        "name": "관심바닥",
+        "signal": lambda d: (d['RSI'] <=50)
+                            & (d['Close'] >= d['MA_5'])
+                            & (d['Close'] > d['Open']),
+    },
+    {
+        "name": "MACD 돌파 매수",
+        "signal": lambda d: (d['MACD'] > d['MACD_Signal']) 
+                            & (d['MACD'].shift(1) <= d['MACD_Signal'].shift(1))
+                            & (d['MACD'] < 0),  # MACD가 음수 영역에서 Signal을 돌파할 때만 매수
+    },
+    {
+        "name": "매수타임", 
+        "signal": lambda d: (d['Close'] > d['BB_Middle'])
+                        & (d['MACD'] > d['MACD_Signal'])
+                        & (d['RSI'] >= 40) & (d['RSI'] <= 60)
+                        & (d['Close'] > d['Open'])
+                        & (d['Close'] <= d['BB_Lower']) & (d['RSI'] > 30)
+                        & (d['Close'].shift(1) > d['Open'].shift(1))  # 오늘과 어제 모두 양봉인 경우로 조건 강화
+                        & (d['Volume'] > d['Volume'].shift(1)),  # 오늘 거래량이 어제보다 많은 경우로 조건 강화
 
-        },
-    ]
+    },
+    {
+        "name": "추천 검색 조건 조합",
+        "signal": lambda d: (
+            ((d['BB_Upper'] - d['BB_Lower']) / d['BB_Middle'] < 0.1)  # 변동성 응축
+            & (d['MACD'] > d['MACD_Signal'])  # MACD 골든크로스
+            & (d['Close'] > d['BB_Middle'])   # 중심선 위
+            & (d['Volume'] > d['Volume'].shift(1) * 2)  # 거래량 200% 증가
+        ),
+    },
+]
 
-    sell_combos = [
-        {
-            "name": "RSI70 + BB 상단",
-            "signal": lambda d: (d['RSI'] >= 70) & (d['High'] >= d['BB_Upper']),
-        },
-        {
-            "name": "MA 데드크로스",
-            "signal": lambda d: (d['MA_5'] < d['MA_20']) & (d['MA_5'].shift(1) >= d['MA_20'].shift(1)),
-        },
-    ]
+sell_combos = [
+    {
+        "name": "RSI70 + BB 상단",
+        "signal": lambda d: (d['RSI'] >= 70) & (d['High'] >= d['BB_Upper']),
+    },
+    {
+        "name": "MA 데드크로스",
+        "signal": lambda d: (d['MA_5'] < d['MA_20']) & (d['MA_5'].shift(1) >= d['MA_20'].shift(1)),
+    },
+]
+
+if __name__ == "__main__":
 
     # 특정 종목에 대해 백테스트 실행 및 시각화
     # run_backtest_and_visualize(
@@ -485,8 +495,8 @@ if __name__ == "__main__":
         korstr="KOSPI", # "KOSPI" 또는 "KOSDAQ"
         buy_combos=[combo for combo in buy_combos if combo["name"]=="매수타임"],
         sell_combos=None,
-        kospi_count=500,
-        recent_days=3,
+        kospi_count=50,
+        recent_days=10,
     )
 
     # 매입종목 리스트를 넣고 매도신호를 포착

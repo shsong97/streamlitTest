@@ -22,16 +22,6 @@ buy_combos = [
                             & (d['Volume'] > d['Vol_Avg']),
     },
 ]
-sell_combos = [
-    {
-        "name": "RSI70 + BB 상단",
-        "signal": lambda d: (d['RSI'] >= 70) & (d['High'] >= d['BB_Upper']),
-    },
-    {
-        "name": "MA 데드크로스",
-        "signal": lambda d: (d['MA_5'] < d['MA_20']) & (d['MA_5'].shift(1) >= d['MA_20'].shift(1)),
-    },
-]
 
 # Telegram 메시지 전송 함수
 def send_telegram_message(message):

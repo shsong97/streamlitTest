@@ -131,7 +131,12 @@ class StockSearchWindow(QWidget):
                 change_str = f"등락률: {change:.2f}%"
             else:
                 change_str = "등락률 정보를 가져올 수 없음"
-            self.result_label.setText(f"{info['Name']} ({info['Code']})\n시장: {info['Market']}\n{price_str}\n{volume_str}\n{change_str}")
+            naver_url = f"https://finance.naver.com/item/fchart.naver?code={info['Code']}"
+            self.result_label.setText(
+                f"{info['Name']} (<a href='{naver_url}' style='color:blue;'>{info['Code']}</a>)<br>"
+                f"시장: {info['Market']}<br>{price_str}<br>{volume_str}<br>{change_str}"
+            )
+            self.result_label.setOpenExternalLinks(True)
         except Exception as e:
             self.result_label.setText(f'오류: {e}')
 
@@ -167,7 +172,12 @@ class StockSearchWindow(QWidget):
                     change_str = f"등락률: {change:.2f}%"
                 else:
                     change_str = "등락률 정보를 가져올 수 없음"
-                self.result_label.setText(f"{info['Name']} ({info['Code']})\n시장: {info['Market']}\n{price_str}\n{volume_str}\n{change_str}")
+                naver_url = f"https://finance.naver.com/item/fchart.naver?code={info['Code']}"
+                self.result_label.setText(
+                    f"{info['Name']} (<a href='{naver_url}' style='color:blue;'>{info['Code']}</a>)<br>"
+                    f"시장: {info['Market']}<br>{price_str}<br>{volume_str}<br>{change_str}"
+                )
+                self.result_label.setOpenExternalLinks(True)
         except Exception as e:
             self.result_label.setText(f'오류: {e}')
 
