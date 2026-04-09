@@ -51,7 +51,7 @@ def send_daily_stock_message():
         send_telegram_message('조건에 맞는 종목이 없습니다.')
 
 
-send_daily_stock_message()  # 프로그램 시작 시 즉시 실행
+#send_daily_stock_message()  # 프로그램 시작 시 즉시 실행
 
 # 매일 10시에 실행
 # schedule.every().day.at("10:00").do(send_daily_stock_message)

@@ -9,8 +9,17 @@ import traceback
 import time
 import os
 
+import requests
+
 # korbacktest.py의 scan_stock_list 함수 임포트
-from korbacktest import _prepare_indicator_df, scan_stock_list, buy_combos
+from korbacktest import _prepare_indicator_df, buy_combos
+
+# Telegram Bot Token과 Chat ID를 .env 파일에서 읽기
+import os
+from dotenv import load_dotenv
+load_dotenv()
+token = os.environ.get('TELEGRAM_BOT_TOKEN')
+chat_id = os.environ.get('TELEGRAM_CHAT_ID')
 
 class ScanThread(QThread):
     result_signal = pyqtSignal(pd.DataFrame)
@@ -84,23 +93,56 @@ class ScanThread(QThread):
 
 
 class StockScannerWindow(QWidget):
-
     def show_result(self, df):
         self.scan_btn.setEnabled(True)
         self.status_label.setText(f'검색 완료: {len(df)}개 종목')
         self.progress_bar.setValue(self.progress_bar.maximum())
         self.current_code_label.setText('')
         self.table.setRowCount(0)
+        self._last_result_df = df
+        # 검색이 완료된 후에만 텔레그램 버튼 활성화
         if df is None or df.empty:
+            self.telegram_btn.setEnabled(False)
             return
+        else:
+            self.telegram_btn.setEnabled(True)
         self.table.setRowCount(len(df))
         for i, row in df.iterrows():
             self.table.setItem(i, 0, QTableWidgetItem(str(row.get('ticker', ''))))
             self.table.setItem(i, 1, QTableWidgetItem(str(row.get('name', ''))))
             self.table.setItem(i, 2, QTableWidgetItem(str(row.get('buy_signal', ''))))
             self.table.setItem(i, 3, QTableWidgetItem(str(row.get('buy_date', ''))))
-            self.table.setItem(i, 4, QTableWidgetItem(str(row.get('sell_signal', ''))))
-            self.table.setItem(i, 5, QTableWidgetItem(str(row.get('sell_date', ''))))
+
+    def send_telegram(self):
+        # 테이블에서 종목코드, 종목명, 매수신호 추출
+        row_count = self.table.rowCount()
+        if row_count == 0:
+            self.status_label.setText('전송할 검색 결과가 없습니다.')
+            return
+        items = []
+        for i in range(row_count):
+            code = self.table.item(i, 0).text() if self.table.item(i, 0) else ''
+            name = self.table.item(i, 1).text() if self.table.item(i, 1) else ''
+            buy_signal = self.table.item(i, 2).text() if self.table.item(i, 2) else ''
+            if code and name:
+                # 매수신호가 있으면 같이 표시
+                if buy_signal:
+                    items.append(f"{code} : {name} [{buy_signal}]")
+                else:
+                    items.append(f"{code} : {name}")
+        if not items:
+            self.status_label.setText('전송할 검색 결과가 없습니다.')
+            return
+        import datetime
+        today = datetime.datetime.now().strftime('%Y-%m-%d')
+        title = f"검색 매수 종목 ({today})"
+        msg = f"{title}\n\n" + '\n'.join(items)
+        resp = self.send_telegram_message(msg)
+        if resp.get('ok'):
+            self.status_label.setText('텔레그램 전송 완료!')
+        else:
+            self.status_label.setText(f"텔레그램 전송 실패: {resp}")
+
 
     def show_error(self, msg):
         self.scan_btn.setEnabled(True)
@@ -143,6 +185,13 @@ class StockScannerWindow(QWidget):
         self.scan_btn = QPushButton('검색 시작', self)
         self.scan_btn.clicked.connect(self.start_scan)
         option_layout.addWidget(self.scan_btn)
+
+        # 텔레그램 전송 버튼
+        self.telegram_btn = QPushButton('텔레그램 전송', self)
+        self.telegram_btn.clicked.connect(self.send_telegram)
+        self.telegram_btn.setEnabled(False)
+        option_layout.addWidget(self.telegram_btn)
+
         main_layout.addLayout(option_layout)
 
         # 진행률 바 (QGroupBox로 감싸서 구분)
@@ -180,8 +229,8 @@ class StockScannerWindow(QWidget):
 
         # 결과 테이블
         self.table = QTableWidget(self)
-        self.table.setColumnCount(6)
-        self.table.setHorizontalHeaderLabels(['티커', '종목명', '매수신호', '매수일', '매도신호', '매도일'])
+        self.table.setColumnCount(4)  # 티커, 종목명, 매수신호, 매수일
+        self.table.setHorizontalHeaderLabels(['티커', '종목명', '매수신호', '매수일'])
         self.table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
         main_layout.addWidget(self.table)
 
@@ -189,6 +238,8 @@ class StockScannerWindow(QWidget):
         self.status_label = QLabel('', self)
         main_layout.addWidget(self.status_label)
 
+
+        
         self.scan_thread = None
 
     def start_scan(self):
@@ -222,74 +273,13 @@ class StockScannerWindow(QWidget):
         self.progress_bar.setValue(current)
         self.current_code_label.setText(f'현재: {code} ({name})')
 
-    class ScanThread(QThread):
-        result_signal = pyqtSignal(pd.DataFrame)
-        error_signal = pyqtSignal(str)
-        progress_signal = pyqtSignal(int, int, str, str)  # current, total, code, name
-
-        def __init__(self, market, recent_days, kospi_count, buy_signal_name, parent=None):
-            super().__init__(parent)
-            self.market = market
-            self.recent_days = recent_days
-            self.kospi_count = kospi_count
-            self.buy_signal_name = buy_signal_name
-
-        def run(self):
-            try:
-                if self.buy_signal_name == '전체':
-                    combos = buy_combos
-                else:
-                    combos = [combo for combo in buy_combos if combo["name"] == self.buy_signal_name]
-                df_krx = fdr.StockListing(self.market)
-                mcap_col = next((col for col in ['MarCap', 'Marcap', 'MarketCap'] if col in df_krx.columns), None)
-                if not mcap_col:
-                    raise ValueError(f"Market cap column not found. Available columns: {list(df_krx.columns)}")
-                top_list = df_krx.sort_values(by=mcap_col, ascending=False).head(self.kospi_count)
-
-                results = []
-                num_count = 0
-                total = len(top_list)
-                for _, row in top_list.iterrows():
-                    symbol, name = row['Code'], row['Name']
-                    if self.market == "KOSPI":
-                        ticker = f"{symbol}.KS"
-                    elif self.market == "KOSDAQ":
-                        ticker = f"{symbol}.KQ"
-                    else:
-                        ticker = symbol
-                    num_count += 1
-                    self.progress_signal.emit(num_count, total, ticker, name)
-                    df = None
-                    try:
-                        df = _prepare_indicator_df(ticker)
-                    except Exception:
-                        pass
-                    if df is None:
-                        continue
-                    buy_dates = []
-                    buy_combo_names = []
-                    for combo in combos:
-                        signal = combo['signal'](df)
-                        recent_hits = signal.tail(self.recent_days)
-                        hits = list(recent_hits[recent_hits].index)
-                        if hits:
-                            buy_dates.extend(hits)
-                            buy_combo_names.append(combo['name'])
-                    if buy_dates:
-                        last_buy = max(buy_dates).date().isoformat() if buy_dates else "-"
-                        results.append({
-                            "ticker": ticker,
-                            "name": name,
-                            "buy_signal": ", ".join(buy_combo_names) if buy_combo_names else "-",
-                            "buy_date": last_buy,
-                            "sell_signal": "-",
-                            "sell_date": "-",
-                        })
-                df_result = pd.DataFrame(results)
-                self.result_signal.emit(df_result)
-            except Exception as e:
-                tb = traceback.format_exc()
-                self.error_signal.emit(f"오류: {e}\n{tb}")
+    # Telegram 메시지 전송 함수 (#sym:send_telegram_message)
+    def send_telegram_message(self, message):
+        url = f'https://api.telegram.org/bot{token}/sendMessage'
+        data = {'chat_id': chat_id, 'text': message}
+        response = requests.post(url, data=data)
+        return response.json()
+    
 
 if __name__ == '__main__':
     app = QApplication(sys.argv)
