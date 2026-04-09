@@ -1,7 +1,8 @@
 import sys
 from PyQt5.QtWidgets import (
-    QApplication, QWidget, QVBoxLayout, QHBoxLayout, QLineEdit, QPushButton, QLabel, QListWidget, QListWidgetItem, QSplitter, QTableWidget, QTableWidgetItem, QHeaderView, QProgressBar
+    QApplication, QWidget, QVBoxLayout, QHBoxLayout, QLineEdit, QPushButton, QLabel, QListWidget, QListWidgetItem, QSplitter, QTableWidget, QTableWidgetItem, QHeaderView, QProgressBar, 
 )
+from PyQt5.QtGui import QStandardItemModel, QStandardItem
 from PyQt5.QtCore import Qt, QThread, pyqtSignal
 import pandas as pd
 import FinanceDataReader as fdr
@@ -26,20 +27,19 @@ class ScanThread(QThread):
     error_signal = pyqtSignal(str)
     progress_signal = pyqtSignal(int, int, str, str)  # current, total, code, name
 
-    def __init__(self, market, recent_days, kospi_count, buy_signal_name, parent=None):
+    def __init__(self, market, recent_days, kospi_count, buy_signal_names, parent=None):
         super().__init__(parent)
         self.market = market
         self.recent_days = recent_days
         self.kospi_count = kospi_count
-        self.buy_signal_name = buy_signal_name
+        self.buy_signal_names = buy_signal_names
 
     def run(self):
         try:
-            # 콤보박스에서 선택한 신호명 또는 '전체'에 따라 검색
-            if self.buy_signal_name == '전체':
+            if '전체' in self.buy_signal_names:
                 combos = buy_combos
             else:
-                combos = [combo for combo in buy_combos if combo["name"] == self.buy_signal_name]
+                combos = [combo for combo in buy_combos if combo["name"] in self.buy_signal_names]
             df_krx = fdr.StockListing(self.market)
             mcap_col = next((col for col in ['MarCap', 'Marcap', 'MarketCap'] if col in df_krx.columns), None)
             if not mcap_col:
@@ -206,14 +206,25 @@ class StockScannerWindow(QWidget):
 
         # 매수신호 콤보박스
         self.buy_combo_combo = QComboBox(self)
-        self.buy_combo_combo.addItem('전체')
-        self.buy_combo_combo.addItems([combo['name'] for combo in buy_combos])
+        view = self.buy_combo_combo.view()
+        view.clicked.connect(self.handle_check)
+        model = QStandardItemModel()
+        all_item = QStandardItem('전체')
+        all_item.setCheckable(True)
+        model.appendRow(all_item)
+        for combo in buy_combos:
+            item = QStandardItem(combo['name'])
+            item.setCheckable(True)
+            model.appendRow(item)
+        self.buy_combo_combo.setModel(model)
         option_layout.addWidget(QLabel('매수신호:'))
         option_layout.addWidget(self.buy_combo_combo)
+
+
         self.count_input = QLineEdit(self)
         self.count_input.setPlaceholderText('스캔 종목 수')
         self.count_input.setText('100')
-        option_layout.addWidget(QLabel('종목 수:'))
+        option_layout.addWidget(QLabel('시총상위:'))
         option_layout.addWidget(self.count_input)
         self.days_input = QLineEdit(self)
         self.days_input.setPlaceholderText('최근 N일')
@@ -230,8 +241,27 @@ class StockScannerWindow(QWidget):
         self.telegram_btn.setEnabled(False)
         option_layout.addWidget(self.telegram_btn)
 
+        # self.single_code_input = QLineEdit(self)
+        # self.single_code_input.setPlaceholderText('종목코드 (예: 005930)')
+        # option_layout.addWidget(self.single_code_input)
+        # self.single_scan_btn = QPushButton('단일검색', self)
+        # self.single_scan_btn.clicked.connect(self.single_scan)
+        # option_layout.addWidget(self.single_scan_btn)
+        
         main_layout.addLayout(option_layout)
 
+        # 2번째 줄: 단일검색 위젯
+        single_layout = QHBoxLayout()
+        self.single_code_input = QLineEdit(self)
+        self.single_code_input.setPlaceholderText('종목코드 (예: 005930)')
+        single_layout.addWidget(QLabel('단일검색:'))
+        single_layout.addWidget(self.single_code_input)
+        self.single_scan_btn = QPushButton('단일검색', self)
+        self.single_scan_btn.clicked.connect(self.single_scan)
+        single_layout.addWidget(self.single_scan_btn)
+        main_layout.addLayout(single_layout)
+
+        
         # 진행률 바 (QGroupBox로 감싸서 구분)
         from PyQt5.QtWidgets import QGroupBox
         progress_group = QGroupBox('진행 상태')
@@ -267,8 +297,8 @@ class StockScannerWindow(QWidget):
 
         # 결과 테이블
         self.table = QTableWidget(self)
-        self.table.setColumnCount(4)  # 티커, 종목명, 매수신호, 매수일
-        self.table.setHorizontalHeaderLabels(['티커', '종목명', '매수신호', '매수일'])
+        self.table.setColumnCount(4)  # 종목코드, 종목명, 매수신호, 매수일
+        self.table.setHorizontalHeaderLabels(['종목코드', '종목명', '매수신호', '매수일'])
         self.table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
         main_layout.addWidget(self.table)
 
@@ -280,10 +310,93 @@ class StockScannerWindow(QWidget):
         self.table.cellClicked.connect(self.on_table_cell_clicked)
 
         self.scan_thread = None
+    
+    # 단일검색 함수 추가
+    def single_scan(self):
+        code = self.single_code_input.text().strip()
+        if not code:
+            self.status_label.setText('종목코드를 입력하세요.')
+            return
+        market = self.market_combo.currentText().strip().upper()
+        buy_signal_names = self.get_selected_buy_signals()
+        try:
+            recent_days = int(self.days_input.text().strip())
+        except Exception:
+            recent_days = 10
+        self.status_label.setText('단일 종목 검색 중...')
+        self.table.setRowCount(0)
+        self.progress_bar.setValue(0)
+        self.current_code_label.setText('')
+        self.scan_btn.setEnabled(False)
+        # market에 맞는 티커 생성
+        if market == "KOSPI":
+            ticker = f"{code}.KS"
+        elif market == "KOSDAQ":
+            ticker = f"{code}.KQ"
+        else:
+            ticker = code
+        # 검색 로직 (buy_signal_names에 따라)
+        from korbacktest import _prepare_indicator_df, buy_combos
+        if '전체' in buy_signal_names:
+            combos = buy_combos
+        else:
+            combos = [combo for combo in buy_combos if combo["name"] in buy_signal_names]
+        try:
+            df = _prepare_indicator_df(ticker)
+            if df is None:
+                self.status_label.setText('데이터를 불러올 수 없습니다.')
+                return
+            buy_dates = []
+            buy_combo_names = []
+            for combo in combos:
+                signal = combo['signal'](df)
+                recent_hits = signal.tail(recent_days)
+                hits = list(recent_hits[recent_hits].index)
+                if hits:
+                    buy_dates.extend(hits)
+                    buy_combo_names.append(combo['name'])
+            if buy_dates:
+                last_buy = max(buy_dates).date().isoformat()
+                result = [{
+                    "ticker": ticker,
+                    "name": code,
+                    "buy_signal": ", ".join(buy_combo_names) if buy_combo_names else "-",
+                    "buy_date": last_buy,
+                }]
+                import pandas as pd
+                self.show_result(pd.DataFrame(result))
+            else:
+                self.status_label.setText('매수신호 조건에 해당 없음')
+        except Exception as e:
+            self.status_label.setText(f'오류: {e}')
+        self.scan_btn.setEnabled(True)
 
+    def handle_check(self, index):
+        item = self.buy_combo_combo.model().itemFromIndex(index)
+        if item is not None:
+            if item.text() == '전체':
+                # 전체가 체크되면 나머지 모두 체크
+                for i in range(1, self.buy_combo_combo.model().rowCount()):
+                    other_item = self.buy_combo_combo.model().item(i)
+                    if other_item is not None:
+                        other_item.setCheckState(item.checkState())
+            else:
+                # 개별이 체크되면 전체는 해제
+                all_item = self.buy_combo_combo.model().item(0)
+                if all_item is not None and item.checkState() == Qt.Unchecked:
+                    all_item.setCheckState(Qt.Unchecked)
+
+    def get_selected_buy_signals(self):
+        selected_names = []
+        for i in range(self.buy_combo_combo.model().rowCount()):
+            item = self.buy_combo_combo.model().item(i)
+            if item.checkState() == Qt.Checked:
+                selected_names.append(item.text())
+        return selected_names
+    
     def start_scan(self):
         market = self.market_combo.currentText().strip().upper()
-        buy_signal_name = self.buy_combo_combo.currentText().strip()
+        buy_signal_names = self.get_selected_buy_signals()
         try:
             kospi_count = int(self.count_input.text().strip())
         except Exception:
@@ -298,7 +411,7 @@ class StockScannerWindow(QWidget):
         self.progress_bar.setMaximum(int(self.count_input.text().strip()) if self.count_input.text().strip().isdigit() else 100)
         self.current_code_label.setText('')
         self.scan_btn.setEnabled(False)
-        self.scan_thread = ScanThread(market, recent_days, kospi_count, buy_signal_name)
+        self.scan_thread = ScanThread(market, recent_days, kospi_count, buy_signal_names)
         self.scan_thread.result_signal.connect(self.show_result)
         self.scan_thread.error_signal.connect(self.show_error)
         self.scan_thread.progress_signal.connect(self.update_progress)

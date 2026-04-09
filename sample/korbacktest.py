@@ -444,16 +444,7 @@ buy_combos = [
                             & (d['MACD'].shift(1) <= d['MACD_Signal'].shift(1))
                             & (d['MACD'] < 0),  # MACD가 음수 영역에서 Signal을 돌파할 때만 매수
     },
-    {
-        "name": "매수타임", 
-        "signal": lambda d: (d['Close'] > d['BB_Middle'])
-                        & (d['MACD'] > d['MACD_Signal'])
-                        & (d['RSI'] >= 40) & (d['RSI'] <= 60)
-                        & (d['Close'] > d['Open'])
-                        #& (d['Close'].shift(1) > d['Open'].shift(1))  # 오늘과 어제 모두 양봉인 경우로 조건 강화
-                        & (d['Volume'] > d['Volume'].shift(1)),  # 오늘 거래량이 어제보다 많은 경우로 조건 강화
-
-    },
+    
     {
         "name": "추천 검색 조건 조합",
         "signal": lambda d: (
@@ -462,6 +453,16 @@ buy_combos = [
             & (d['Close'] > d['BB_Middle'])   # 중심선 위
             & (d['Volume'] > d['Volume'].shift(1) * 2)  # 거래량 200% 증가
         ),
+    },
+    {
+        "name": "매수타임", 
+        "signal": lambda d: (d['Close'] > d['BB_Middle'])
+                        & (d['MACD'] > d['MACD_Signal'])
+                        & (d['RSI'] >= 40) & (d['RSI'] <= 60)
+                        & (d['Close'] > d['Open'])
+                        & (d['Close'].shift(1) > d['Open'].shift(1))  # 오늘과 어제 모두 양봉인 경우로 조건 강화
+                        & (d['Volume'] > d['Volume'].shift(1)),  # 오늘 거래량이 어제보다 많은 경우로 조건 강화
+
     },
 ]
 
