@@ -1,6 +1,82 @@
-# Project 설명
-- streamlit 을 사용하여 데이터 시각화를 연습한다.
-- dataframe을 다루는 방법을 학습한다.
+
+# Python 데이터 분석/시각화/주식 자동화 프로젝트
+
+이 프로젝트는 **Streamlit** 기반의 웹앱과 다양한 데이터 분석, 주식 자동화, 차트 시각화, 인증 기능, 샘플 데이터 분석 예제 등을 포함합니다. 한국투자증권 OpenAPI, KOSIS(통계청) API, yfinance, FinanceDataReader 등 다양한 외부 데이터 소스를 활용합니다.
+
+## 주요 폴더 및 파일 구조
+
+- **streamlit_app.py**: Streamlit 기반 메인 앱. 여러 페이지(차트, 인증, 샘플 등)로 구성된 대시보드.
+- **korinvest/**: 한국투자증권 OpenAPI 연동, 토큰 발급, 주식 시세/랭킹 조회, 토큰 자동 갱신 등 주식 자동화 핵심 모듈.
+	- korinvest.py: OpenAPI 토큰 발급 및 랭킹 조회
+	- korquery.py: 토큰 자동 갱신, 개별 종목 시세 조회
+	- kortoken.py: 토큰 발급 예제
+	- koreanpo.py: KOSIS API(통계청) 연동, 인구 데이터 시각화
+- **pages/**: Streamlit 페이지별 UI/기능 구현
+	- chartsearch.py: 네이버/야후 주식 차트(1개월) 검색 및 시각화
+	- chart6mo.py: 주요 종목 6개월 차트, 네이버 금융 연동
+	- loginauth.py: 파일 기반 회원가입/로그인 인증(암호화 저장)
+	- users.json: 회원 정보 저장 파일
+- **sample/**: 데이터 분석/시각화/백테스트/샘플 코드
+	- korbacktest.py: 주식 보조지표(RSI, 볼린저밴드, MACD 등) 기반 백테스트 및 신호 스캔, 시각화
+	- korstockraise.py: 반도체 등 테마주 급등주 스크리닝
+	- irisdata.py: scikit-learn iris 데이터셋 분석/필터링/시각화 예제
+	- pdsample.py: pandas DataFrame/차트/컴포넌트 샘플
+	- streamlittest.py: Streamlit 위젯/차트/탭/메트릭 등 다양한 UI 예제
+- **util/**: 공통 유틸리티
+	- plotfont.py: 한글 폰트 자동 적용 함수
+- **static/**: 폰트 등 정적 파일
+
+## 주요 기능 요약
+
+- **주식 자동화/데이터 수집**
+	- 한국투자증권 OpenAPI 연동(토큰 발급, 랭킹/시세 조회, 토큰 자동 갱신)
+	- KOSIS(통계청) API 연동(인구 등 공공데이터)
+	- yfinance, FinanceDataReader 등으로 국내외 주가 데이터 수집
+- **Streamlit 기반 대시보드**
+	- 종목 차트 검색, 6개월 차트, iris 데이터, pandas 샘플, 로그인 인증 등 다양한 페이지 제공
+	- 파일 기반 회원가입/로그인(암호화 저장)
+- **주식 백테스트/신호 스캔**
+	- RSI, 볼린저밴드, MACD, StochRSI 등 다양한 보조지표 기반 신호 탐지 및 시각화
+	- 테마주(반도체 등) 급등주 조건 스크리닝
+- **데이터 분석/시각화 예제**
+	- pandas, scikit-learn, matplotlib, plotly 등 다양한 라이브러리 활용
+	- Streamlit의 다양한 컴포넌트/차트/탭/메트릭 시연
+
+## 설치 및 실행
+
+### 전체 패키지 설치
+```bash
+pip install -r requirements.txt
+```
+
+### 주요 패키지 개별 설치 예시
+```bash
+pip install streamlit scikit-learn yfinance FinanceDataReader pandas matplotlib
+```
+
+### requirements.txt 생성
+```bash
+pip freeze > requirements.txt
+```
+
+### Streamlit 앱 실행
+```bash
+streamlit run streamlit_app.py
+```
+
+## 예시 화면/실행 흐름
+
+1. `streamlit run streamlit_app.py` 실행 → 대시보드 접속
+2. 좌측 메뉴에서 차트, 인증, 샘플 등 다양한 페이지 탐색
+3. 주식 데이터/공공데이터 실시간 조회 및 시각화, 백테스트, 조건검색 등 활용
+
+## 참고/문서
+
+- [Streamlit 공식 문서](https://docs.streamlit.io/)
+- [한국투자증권 OpenAPI](https://apiportal.koreainvestment.com/)
+- [KOSIS 통계청 OpenAPI](https://kosis.kr/openapi/)
+- [FinanceDataReader](https://financedata.github.io/posts/finance-data-reader-users-guide.html)
+
 
 ## 설치
 ### streamlit 참고 사이트
