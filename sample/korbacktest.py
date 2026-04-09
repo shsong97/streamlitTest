@@ -450,8 +450,7 @@ buy_combos = [
                         & (d['MACD'] > d['MACD_Signal'])
                         & (d['RSI'] >= 40) & (d['RSI'] <= 60)
                         & (d['Close'] > d['Open'])
-                        & (d['Close'] <= d['BB_Lower']) & (d['RSI'] > 30)
-                        & (d['Close'].shift(1) > d['Open'].shift(1))  # 오늘과 어제 모두 양봉인 경우로 조건 강화
+                        #& (d['Close'].shift(1) > d['Open'].shift(1))  # 오늘과 어제 모두 양봉인 경우로 조건 강화
                         & (d['Volume'] > d['Volume'].shift(1)),  # 오늘 거래량이 어제보다 많은 경우로 조건 강화
 
     },

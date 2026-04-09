@@ -93,6 +93,15 @@ class ScanThread(QThread):
 
 
 class StockScannerWindow(QWidget):
+    def on_table_cell_clicked(self, row, column):
+        # 0번 컬럼(티커) 클릭 시 네이버 금융 링크 열기
+        if column == 0:
+            item = self.table.item(row, column)
+            if item:
+                url = item.data(Qt.UserRole)
+                if url:
+                    import webbrowser
+                    webbrowser.open(url)
     def show_result(self, df):
         self.scan_btn.setEnabled(True)
         self.status_label.setText(f'검색 완료: {len(df)}개 종목')
@@ -108,10 +117,38 @@ class StockScannerWindow(QWidget):
             self.telegram_btn.setEnabled(True)
         self.table.setRowCount(len(df))
         for i, row in df.iterrows():
-            self.table.setItem(i, 0, QTableWidgetItem(str(row.get('ticker', ''))))
-            self.table.setItem(i, 1, QTableWidgetItem(str(row.get('name', ''))))
-            self.table.setItem(i, 2, QTableWidgetItem(str(row.get('buy_signal', ''))))
-            self.table.setItem(i, 3, QTableWidgetItem(str(row.get('buy_date', ''))))
+            ticker = str(row.get('ticker', ''))
+            name = str(row.get('name', ''))
+            buy_signal = str(row.get('buy_signal', ''))
+            buy_date = str(row.get('buy_date', ''))
+            # 네이버 금융 차트 링크 생성 (티커에서 코드만 추출)
+            code = ticker.split('.')[0] if '.' in ticker else ticker
+            naver_url = f"https://finance.naver.com/item/fchart.naver?code={code}"
+            code_item = QTableWidgetItem(f"<a href='{naver_url}'>{code}</a>")
+            code_item.setFlags(code_item.flags() & ~Qt.ItemIsEditable)
+            code_item.setData(Qt.UserRole, naver_url)
+            self.table.setItem(i, 0, code_item)
+            self.table.setItem(i, 1, QTableWidgetItem(name))
+            self.table.setItem(i, 2, QTableWidgetItem(buy_signal))
+            self.table.setItem(i, 3, QTableWidgetItem(buy_date))
+
+        # 테이블에서 HTML 링크가 보이도록 delegate 설정
+        from PyQt5.QtWidgets import QStyledItemDelegate
+        class HTMLDelegate(QStyledItemDelegate):
+            def paint(self, painter, option, index):
+                from PyQt5.QtGui import QTextDocument
+                doc = QTextDocument()
+                doc.setHtml(index.data())
+                painter.save()
+                painter.translate(option.rect.topLeft())
+                doc.drawContents(painter)
+                painter.restore()
+            def sizeHint(self, option, index):
+                from PyQt5.QtGui import QTextDocument
+                doc = QTextDocument()
+                doc.setHtml(index.data())
+                return doc.size().toSize()
+        self.table.setItemDelegateForColumn(0, HTMLDelegate(self.table))
 
     def send_telegram(self):
         # 테이블에서 종목코드, 종목명, 매수신호 추출
@@ -150,6 +187,7 @@ class StockScannerWindow(QWidget):
         self.progress_bar.setValue(0)
         self.current_code_label.setText('')
         
+
     def __init__(self):
         super().__init__()
         self.setWindowTitle('추천 검색 조건 주식 스캐너')
@@ -238,8 +276,9 @@ class StockScannerWindow(QWidget):
         self.status_label = QLabel('', self)
         main_layout.addWidget(self.status_label)
 
+        # 테이블 셀 클릭 시 하이퍼링크 열기 연결
+        self.table.cellClicked.connect(self.on_table_cell_clicked)
 
-        
         self.scan_thread = None
 
     def start_scan(self):
@@ -276,7 +315,7 @@ class StockScannerWindow(QWidget):
     # Telegram 메시지 전송 함수 (#sym:send_telegram_message)
     def send_telegram_message(self, message):
         url = f'https://api.telegram.org/bot{token}/sendMessage'
-        data = {'chat_id': chat_id, 'text': message}
+        data = {'chat_id': chat_id, 'text': message, 'parse_mode': 'HTML'}
         response = requests.post(url, data=data)
         return response.json()
     
