@@ -461,7 +461,7 @@ buy_combos = [
                         & (d['RSI'] >= 40) & (d['RSI'] <= 60)
                         & (d['Close'] > d['Open'])
                         & (d['Close'].shift(1) > d['Open'].shift(1))  # 오늘과 어제 모두 양봉인 경우로 조건 강화
-                        & (d['Volume'] > d['Volume'].shift(1)),  # 오늘 거래량이 어제보다 많은 경우로 조건 강화
+                        & (d['Volume'] > d['Volume'].shift(1) * 2),  # 오늘 거래량이 어제보다 많은 경우로 조건 강화
 
     },
 ]
@@ -480,24 +480,24 @@ sell_combos = [
 if __name__ == "__main__":
 
     # 특정 종목에 대해 백테스트 실행 및 시각화
-    # run_backtest_and_visualize(
-    #     "221800.KQ",  
-    #     buy_combos=buy_combos,
-    #     sell_combos=sell_combos,
-    #     hold_days=5,
-    # )
+    run_backtest_and_visualize(
+        "034220.KS",  # 예시 종목 (LG디스플레이)
+        buy_combos=buy_combos,
+        sell_combos=sell_combos,
+        hold_days=5,
+    )
 
     import time
     start_time = time.time()
 
     # 매수 종목을 스캔해 최근 신호가 나온 종목 리스트를 출력
-    scan_stock_list(
-        korstr="KOSPI", # "KOSPI" 또는 "KOSDAQ"
-        buy_combos=[combo for combo in buy_combos if combo["name"]=="매수타임"],
-        sell_combos=None,
-        kospi_count=50,
-        recent_days=10,
-    )
+    # scan_stock_list(
+    #     korstr="KOSPI", # "KOSPI" 또는 "KOSDAQ"
+    #     buy_combos=[combo for combo in buy_combos if combo["name"]=="매수타임"],
+    #     sell_combos=None,
+    #     kospi_count=50,
+    #     recent_days=10,
+    # )
 
     # 매입종목 리스트를 넣고 매도신호를 포착
     # scan_sell_signal_list(

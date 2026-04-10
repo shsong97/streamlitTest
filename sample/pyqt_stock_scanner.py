@@ -1,13 +1,17 @@
 import sys
 from PyQt5.QtWidgets import (
-    QApplication, QWidget, QVBoxLayout, QHBoxLayout, QLineEdit, QPushButton, QLabel, QListWidget, QListWidgetItem, QSplitter, QTableWidget, QTableWidgetItem, QHeaderView, QProgressBar, 
+    QApplication, QCheckBox, QWidget, QVBoxLayout, QHBoxLayout, 
+    QLineEdit, QPushButton, QLabel, QTableWidget, QTableWidgetItem, 
+    QHeaderView, QProgressBar,
 )
-from PyQt5.QtGui import QStandardItemModel, QStandardItem
 from PyQt5.QtCore import Qt, QThread, pyqtSignal
+from PyQt5.QtWidgets import QCheckBox, QVBoxLayout
+from PyQt5.QtWidgets import QComboBox
+from PyQt5.QtWidgets import QGroupBox
+from PyQt5.QtGui import QStandardItemModel, QStandardItem
 import pandas as pd
 import FinanceDataReader as fdr
 import traceback
-import time
 import os
 
 import requests
@@ -107,14 +111,15 @@ class StockScannerWindow(QWidget):
         self.status_label.setText(f'검색 완료: {len(df)}개 종목')
         self.progress_bar.setValue(self.progress_bar.maximum())
         self.current_code_label.setText('')
-        self.table.setRowCount(0)
         self._last_result_df = df
-        # 검색이 완료된 후에만 텔레그램 버튼 활성화
+        # 검색이 완료된 후에만 텔레그램/다운로드 버튼 활성화
         if df is None or df.empty:
             self.telegram_btn.setEnabled(False)
+            self.download_btn.setEnabled(False)
             return
         else:
             self.telegram_btn.setEnabled(True)
+            self.download_btn.setEnabled(True)
         self.table.setRowCount(len(df))
         for i, row in df.iterrows():
             ticker = str(row.get('ticker', ''))
@@ -188,16 +193,39 @@ class StockScannerWindow(QWidget):
         self.current_code_label.setText('')
         
 
+    def download_result(self):
+        # 검색 결과를 텍스트 파일로 저장
+        if not hasattr(self, '_last_result_df') or self._last_result_df is None or self._last_result_df.empty:
+            self.status_label.setText('다운로드할 검색 결과가 없습니다.')
+            return
+        import datetime
+        today = datetime.datetime.now().strftime('%Y%m%d')
+        market = self.market_combo.currentText().strip().upper()
+        filename = f"stock_search_result_{today}_{market}.txt"
+        try:
+            lines = []
+            for _, row in self._last_result_df.iterrows():
+                code = str(row.get('ticker', ''))
+                name = str(row.get('name', ''))
+                buy_signal = str(row.get('buy_signal', ''))
+                buy_date = str(row.get('buy_date', ''))
+                lines.append(f"{code}\t{name}\t{buy_signal}\t{buy_date}")
+            with open(filename, 'w', encoding='utf-8') as f:
+                f.write('종목코드\t종목명\t매수신호\t매수일\n')
+                f.write('\n'.join(lines))
+            self.status_label.setText(f'검색 결과를 {filename} 파일로 저장했습니다.')
+        except Exception as e:
+            self.status_label.setText(f'파일 저장 오류: {e}')
+
     def __init__(self):
         super().__init__()
-        self.setWindowTitle('추천 검색 조건 주식 스캐너')
-        self.resize(900, 650)
+        self.setWindowTitle('추천종목 검색기')
+        self.resize(1200, 700)
 
         main_layout = QVBoxLayout()
         self.setLayout(main_layout)
 
         # 상단: 검색 옵션
-        from PyQt5.QtWidgets import QComboBox
         option_layout = QHBoxLayout()
         self.market_combo = QComboBox(self)
         self.market_combo.addItems(['KOSPI', 'KOSDAQ'])
@@ -241,12 +269,11 @@ class StockScannerWindow(QWidget):
         self.telegram_btn.setEnabled(False)
         option_layout.addWidget(self.telegram_btn)
 
-        # self.single_code_input = QLineEdit(self)
-        # self.single_code_input.setPlaceholderText('종목코드 (예: 005930)')
-        # option_layout.addWidget(self.single_code_input)
-        # self.single_scan_btn = QPushButton('단일검색', self)
-        # self.single_scan_btn.clicked.connect(self.single_scan)
-        # option_layout.addWidget(self.single_scan_btn)
+        # 결과 다운로드 버튼
+        self.download_btn = QPushButton('결과 다운로드', self)
+        self.download_btn.clicked.connect(self.download_result)
+        self.download_btn.setEnabled(False)
+        option_layout.addWidget(self.download_btn)
         
         main_layout.addLayout(option_layout)
 
