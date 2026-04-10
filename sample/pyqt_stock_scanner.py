@@ -1,26 +1,22 @@
-import sys
 from PyQt5.QtWidgets import (
     QApplication, QCheckBox, QWidget, QVBoxLayout, QHBoxLayout, 
     QLineEdit, QPushButton, QLabel, QTableWidget, QTableWidgetItem, 
-    QHeaderView, QProgressBar,
+    QHeaderView, QProgressBar, QComboBox, QGroupBox,
+    QStyledItemDelegate
 )
 from PyQt5.QtCore import Qt, QThread, pyqtSignal
-from PyQt5.QtWidgets import QCheckBox, QVBoxLayout
-from PyQt5.QtWidgets import QComboBox
-from PyQt5.QtWidgets import QGroupBox
-from PyQt5.QtGui import QStandardItemModel, QStandardItem
+from PyQt5.QtGui import (
+    QStandardItemModel, QStandardItem, QTextDocument
+)
+
 import pandas as pd
 import FinanceDataReader as fdr
-import traceback
-import os
-
-import requests
-
+import sys, os, datetime, requests, webbrowser, traceback
+              
 # korbacktest.py의 scan_stock_list 함수 임포트
 from korbacktest import _prepare_indicator_df, buy_combos
 
 # Telegram Bot Token과 Chat ID를 .env 파일에서 읽기
-import os
 from dotenv import load_dotenv
 load_dotenv()
 token = os.environ.get('TELEGRAM_BOT_TOKEN')
@@ -97,126 +93,6 @@ class ScanThread(QThread):
 
 
 class StockScannerWindow(QWidget):
-    def on_table_cell_clicked(self, row, column):
-        # 0번 컬럼(티커) 클릭 시 네이버 금융 링크 열기
-        if column == 0:
-            item = self.table.item(row, column)
-            if item:
-                url = item.data(Qt.UserRole)
-                if url:
-                    import webbrowser
-                    webbrowser.open(url)
-    def show_result(self, df):
-        self.scan_btn.setEnabled(True)
-        self.status_label.setText(f'검색 완료: {len(df)}개 종목')
-        self.progress_bar.setValue(self.progress_bar.maximum())
-        self.current_code_label.setText('')
-        self._last_result_df = df
-        # 검색이 완료된 후에만 텔레그램/다운로드 버튼 활성화
-        if df is None or df.empty:
-            self.telegram_btn.setEnabled(False)
-            self.download_btn.setEnabled(False)
-            return
-        else:
-            self.telegram_btn.setEnabled(True)
-            self.download_btn.setEnabled(True)
-        self.table.setRowCount(len(df))
-        for i, row in df.iterrows():
-            ticker = str(row.get('ticker', ''))
-            name = str(row.get('name', ''))
-            buy_signal = str(row.get('buy_signal', ''))
-            buy_date = str(row.get('buy_date', ''))
-            # 네이버 금융 차트 링크 생성 (티커에서 코드만 추출)
-            code = ticker.split('.')[0] if '.' in ticker else ticker
-            naver_url = f"https://finance.naver.com/item/fchart.naver?code={code}"
-            code_item = QTableWidgetItem(f"<a href='{naver_url}'>{code}</a>")
-            code_item.setFlags(code_item.flags() & ~Qt.ItemIsEditable)
-            code_item.setData(Qt.UserRole, naver_url)
-            self.table.setItem(i, 0, code_item)
-            self.table.setItem(i, 1, QTableWidgetItem(name))
-            self.table.setItem(i, 2, QTableWidgetItem(buy_signal))
-            self.table.setItem(i, 3, QTableWidgetItem(buy_date))
-
-        # 테이블에서 HTML 링크가 보이도록 delegate 설정
-        from PyQt5.QtWidgets import QStyledItemDelegate
-        class HTMLDelegate(QStyledItemDelegate):
-            def paint(self, painter, option, index):
-                from PyQt5.QtGui import QTextDocument
-                doc = QTextDocument()
-                doc.setHtml(index.data())
-                painter.save()
-                painter.translate(option.rect.topLeft())
-                doc.drawContents(painter)
-                painter.restore()
-            def sizeHint(self, option, index):
-                from PyQt5.QtGui import QTextDocument
-                doc = QTextDocument()
-                doc.setHtml(index.data())
-                return doc.size().toSize()
-        self.table.setItemDelegateForColumn(0, HTMLDelegate(self.table))
-
-    def send_telegram(self):
-        # 테이블에서 종목코드, 종목명, 매수신호 추출
-        row_count = self.table.rowCount()
-        if row_count == 0:
-            self.status_label.setText('전송할 검색 결과가 없습니다.')
-            return
-        items = []
-        for i in range(row_count):
-            code = self.table.item(i, 0).text() if self.table.item(i, 0) else ''
-            name = self.table.item(i, 1).text() if self.table.item(i, 1) else ''
-            buy_signal = self.table.item(i, 2).text() if self.table.item(i, 2) else ''
-            if code and name:
-                # 매수신호가 있으면 같이 표시
-                if buy_signal:
-                    items.append(f"{code} : {name} [{buy_signal}]")
-                else:
-                    items.append(f"{code} : {name}")
-        if not items:
-            self.status_label.setText('전송할 검색 결과가 없습니다.')
-            return
-        import datetime
-        today = datetime.datetime.now().strftime('%Y-%m-%d')
-        title = f"검색 매수 종목 ({today})"
-        msg = f"{title}\n\n" + '\n'.join(items)
-        resp = self.send_telegram_message(msg)
-        if resp.get('ok'):
-            self.status_label.setText('텔레그램 전송 완료!')
-        else:
-            self.status_label.setText(f"텔레그램 전송 실패: {resp}")
-
-
-    def show_error(self, msg):
-        self.scan_btn.setEnabled(True)
-        self.status_label.setText(msg)
-        self.progress_bar.setValue(0)
-        self.current_code_label.setText('')
-        
-
-    def download_result(self):
-        # 검색 결과를 텍스트 파일로 저장
-        if not hasattr(self, '_last_result_df') or self._last_result_df is None or self._last_result_df.empty:
-            self.status_label.setText('다운로드할 검색 결과가 없습니다.')
-            return
-        import datetime
-        today = datetime.datetime.now().strftime('%Y%m%d')
-        market = self.market_combo.currentText().strip().upper()
-        filename = f"stock_search_result_{today}_{market}.txt"
-        try:
-            lines = []
-            for _, row in self._last_result_df.iterrows():
-                code = str(row.get('ticker', ''))
-                name = str(row.get('name', ''))
-                buy_signal = str(row.get('buy_signal', ''))
-                buy_date = str(row.get('buy_date', ''))
-                lines.append(f"{code}\t{name}\t{buy_signal}\t{buy_date}")
-            with open(filename, 'w', encoding='utf-8') as f:
-                f.write('종목코드\t종목명\t매수신호\t매수일\n')
-                f.write('\n'.join(lines))
-            self.status_label.setText(f'검색 결과를 {filename} 파일로 저장했습니다.')
-        except Exception as e:
-            self.status_label.setText(f'파일 저장 오류: {e}')
-
     def __init__(self):
         super().__init__()
         self.setWindowTitle('추천종목 검색기')
@@ -290,7 +166,6 @@ class StockScannerWindow(QWidget):
 
         
         # 진행률 바 (QGroupBox로 감싸서 구분)
-        from PyQt5.QtWidgets import QGroupBox
         progress_group = QGroupBox('진행 상태')
         progress_group_layout = QVBoxLayout()
         progress_group.setLayout(progress_group_layout)
@@ -337,6 +212,124 @@ class StockScannerWindow(QWidget):
         self.table.cellClicked.connect(self.on_table_cell_clicked)
 
         self.scan_thread = None
+ 
+    def on_table_cell_clicked(self, row, column):
+        # 0번 컬럼(티커) 클릭 시 네이버 금융 링크 열기
+        if column == 0:
+            item = self.table.item(row, column)
+            if item:
+                url = item.data(Qt.UserRole)
+                if url:
+                    webbrowser.open(url)
+    def show_result(self, df):
+        self.scan_btn.setEnabled(True)
+        self.status_label.setText(f'검색 완료: {len(df)}개 종목')
+        self.progress_bar.setValue(self.progress_bar.maximum())
+        self.current_code_label.setText('')
+        self._last_result_df = df
+        # 검색이 완료된 후에만 텔레그램/다운로드 버튼 활성화
+        if df is None or df.empty:
+            self.telegram_btn.setEnabled(False)
+            self.download_btn.setEnabled(False)
+            return
+        else:
+            self.telegram_btn.setEnabled(True)
+            self.download_btn.setEnabled(True)
+        self.table.setRowCount(len(df))
+        for i, row in df.iterrows():
+            ticker = str(row.get('ticker', ''))
+            name = str(row.get('name', ''))
+            buy_signal = str(row.get('buy_signal', ''))
+            buy_date = str(row.get('buy_date', ''))
+            # 네이버 금융 차트 링크 생성 (티커에서 코드만 추출)
+            code = ticker.split('.')[0] if '.' in ticker else ticker
+            naver_url = f"https://finance.naver.com/item/fchart.naver?code={code}"
+            code_item = QTableWidgetItem(f"<a href='{naver_url}'>{code}</a>")
+            code_item.setFlags(code_item.flags() & ~Qt.ItemIsEditable)
+            code_item.setData(Qt.UserRole, naver_url)
+            self.table.setItem(i, 0, code_item)
+            self.table.setItem(i, 1, QTableWidgetItem(name))
+            self.table.setItem(i, 2, QTableWidgetItem(buy_signal))
+            self.table.setItem(i, 3, QTableWidgetItem(buy_date))
+
+        # 테이블에서 HTML 링크가 보이도록 delegate 설정
+        class HTMLDelegate(QStyledItemDelegate):
+            def paint(self, painter, option, index):
+                doc = QTextDocument()
+                doc.setHtml(index.data())
+                painter.save()
+                painter.translate(option.rect.topLeft())
+                doc.drawContents(painter)
+                painter.restore()
+            def sizeHint(self, option, index):
+                from PyQt5.QtGui import QTextDocument
+                doc = QTextDocument()
+                doc.setHtml(index.data())
+                return doc.size().toSize()
+        self.table.setItemDelegateForColumn(0, HTMLDelegate(self.table))
+
+    def send_telegram(self):
+        # 테이블에서 종목코드, 종목명, 매수신호 추출
+        row_count = self.table.rowCount()
+        if row_count == 0:
+            self.status_label.setText('전송할 검색 결과가 없습니다.')
+            return
+        items = []
+        for i in range(row_count):
+            code = self.table.item(i, 0).text() if self.table.item(i, 0) else ''
+            name = self.table.item(i, 1).text() if self.table.item(i, 1) else ''
+            buy_signal = self.table.item(i, 2).text() if self.table.item(i, 2) else ''
+            if code and name:
+                # 매수신호가 있으면 같이 표시
+                if buy_signal:
+                    items.append(f"{code} : {name} [{buy_signal}]")
+                else:
+                    items.append(f"{code} : {name}")
+        if not items:
+            self.status_label.setText('전송할 검색 결과가 없습니다.')
+            return
+        today = datetime.datetime.now().strftime('%Y-%m-%d')
+        title = f"검색 매수 종목 ({today})"
+        msg = f"{title}\n\n" + '\n'.join(items)
+        resp = self.send_telegram_message(msg)
+        if resp.get('ok'):
+            self.status_label.setText('텔레그램 전송 완료!')
+        else:
+            self.status_label.setText(f"텔레그램 전송 실패: {resp}")
+
+
+    def show_error(self, msg):
+        self.scan_btn.setEnabled(True)
+        self.status_label.setText(msg)
+        self.progress_bar.setValue(0)
+        self.current_code_label.setText('')
+        self.telegram_btn.setEnabled(False)
+        self.download_btn.setEnabled(False)
+
+
+    def download_result(self):
+        # 검색 결과를 텍스트 파일로 저장
+        if not hasattr(self, '_last_result_df') or self._last_result_df is None or self._last_result_df.empty:
+            self.status_label.setText('다운로드할 검색 결과가 없습니다.')
+            return
+        today = datetime.datetime.now().strftime('%Y%m%d')
+        market = self.market_combo.currentText().strip().upper()
+        filename = f"stock_search_result_{today}_{market}.txt"
+        try:
+            lines = []
+            for _, row in self._last_result_df.iterrows():
+                code = str(row.get('ticker', ''))
+                name = str(row.get('name', ''))
+                buy_signal = str(row.get('buy_signal', ''))
+                buy_date = str(row.get('buy_date', ''))
+                lines.append(f"{code}\t{name}\t{buy_signal}\t{buy_date}")
+            with open(filename, 'w', encoding='utf-8') as f:
+                f.write('종목코드\t종목명\t매수신호\t매수일\n')
+                f.write('\n'.join(lines))
+            self.status_label.setText(f'검색 결과를 {filename} 파일로 저장했습니다.')
+        except Exception as e:
+            self.status_label.setText(f'파일 저장 오류: {e}')
+
     
     # 단일검색 함수 추가
     def single_scan(self):
@@ -363,7 +356,6 @@ class StockScannerWindow(QWidget):
         else:
             ticker = code
         # 검색 로직 (buy_signal_names에 따라)
-        from korbacktest import _prepare_indicator_df, buy_combos
         if '전체' in buy_signal_names:
             combos = buy_combos
         else:
@@ -390,7 +382,6 @@ class StockScannerWindow(QWidget):
                     "buy_signal": ", ".join(buy_combo_names) if buy_combo_names else "-",
                     "buy_date": last_buy,
                 }]
-                import pandas as pd
                 self.show_result(pd.DataFrame(result))
             else:
                 self.status_label.setText('매수신호 조건에 해당 없음')
