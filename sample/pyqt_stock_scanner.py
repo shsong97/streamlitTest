@@ -93,6 +93,7 @@ class ScanThread(QThread):
 
 
 class StockScannerWindow(QWidget):
+
     def __init__(self):
         super().__init__()
         self.setWindowTitle('추천종목 검색기')
@@ -111,19 +112,21 @@ class StockScannerWindow(QWidget):
         # 매수신호 콤보박스
         self.buy_combo_combo = QComboBox(self)
         view = self.buy_combo_combo.view()
-        view.clicked.connect(self.handle_check)
+        view.pressed.connect(self.handle_check)
         model = QStandardItemModel()
         all_item = QStandardItem('전체')
-        all_item.setCheckable(True)
+        # all_item.setCheckable(True)
+        all_item.setFlags(Qt.ItemIsEnabled | Qt.ItemIsUserCheckable)
+        all_item.setData(Qt.Unchecked, Qt.CheckStateRole)
         model.appendRow(all_item)
         for combo in buy_combos:
             item = QStandardItem(combo['name'])
-            item.setCheckable(True)
+            item.setFlags(Qt.ItemIsEnabled | Qt.ItemIsUserCheckable)
+            item.setData(Qt.Unchecked, Qt.CheckStateRole)
             model.appendRow(item)
         self.buy_combo_combo.setModel(model)
         option_layout.addWidget(QLabel('매수신호:'))
         option_layout.addWidget(self.buy_combo_combo)
-
 
         self.count_input = QLineEdit(self)
         self.count_input.setPlaceholderText('스캔 종목 수')
@@ -156,7 +159,7 @@ class StockScannerWindow(QWidget):
         # 2번째 줄: 단일검색 위젯
         single_layout = QHBoxLayout()
         self.single_code_input = QLineEdit(self)
-        self.single_code_input.setPlaceholderText('종목코드 (예: 005930)')
+        self.single_code_input.setPlaceholderText('종목코드/이름/초성')
         single_layout.addWidget(QLabel('단일검색:'))
         single_layout.addWidget(self.single_code_input)
         self.single_scan_btn = QPushButton('단일검색', self)
@@ -164,7 +167,15 @@ class StockScannerWindow(QWidget):
         single_layout.addWidget(self.single_scan_btn)
         main_layout.addLayout(single_layout)
 
-        
+        # --- 종목 데이터 및 자동완성 준비 (모든 위젯 생성 후에 실행) ---
+        # self.stock_df = self._load_stock_data()
+        # self.stock_completer = self._create_stock_completer()
+
+        # self.single_code_input.setCompleter(self.stock_completer)
+        # self.stock_completer.activated.connect(self._on_completer_activated)
+
+    
+
         # 진행률 바 (QGroupBox로 감싸서 구분)
         progress_group = QGroupBox('진행 상태')
         progress_group_layout = QVBoxLayout()
@@ -213,6 +224,69 @@ class StockScannerWindow(QWidget):
 
         self.scan_thread = None
  
+    def _on_completer_activated(self, text):
+        # 선택된 텍스트에서 종목코드 추출 후 QLineEdit에 입력
+        code = None
+        # 1. "코드 명칭" 형태
+        if ' ' in text:
+            code = text.split(' ')[0]
+        # 2. "명칭 (코드)" 형태
+        elif '(' in text and ')' in text:
+            code = text.split('(')[-1].split(')')[0]
+        # 3. 초성만 입력된 경우: stock_df에서 초성 매칭
+        else:
+            match = self.stock_df[self.stock_df['초성'] == text]
+            if not match.empty:
+                code = match.iloc[0]['Code']
+        if code:
+            self.single_code_input.setText(str(code))
+
+    def _load_stock_data(self):
+        # KOSPI/KOSDAQ 전체 종목명+코드 DataFrame 준비
+        try:
+            df_kospi = fdr.StockListing('KOSPI')[['Code', 'Name']]
+            df_kosdaq = fdr.StockListing('KOSDAQ')[['Code', 'Name']]
+            df = pd.concat([df_kospi, df_kosdaq], ignore_index=True)
+            df['초성'] = df['Name'].apply(self._get_chosung)
+            return df
+        except Exception as e:
+            print(f"종목 데이터 로드 실패: {e}")
+            return pd.DataFrame(columns=['Code', 'Name', '초성'])
+
+    def _get_chosung(self, text):
+        # 한글 초성 추출 함수
+        CHOSUNG_LIST = [
+            'ㄱ', 'ㄲ', 'ㄴ', 'ㄷ', 'ㄸ', 'ㄹ', 'ㅁ', 'ㅂ', 'ㅃ', 'ㅅ', 'ㅆ',
+            'ㅇ', 'ㅈ', 'ㅉ', 'ㅊ', 'ㅋ', 'ㅌ', 'ㅍ', 'ㅎ'
+        ]
+        result = ''
+        for char in text:
+            if '가' <= char <= '힣':
+                code = ord(char) - ord('가')
+                chosung = code // 588
+                result += CHOSUNG_LIST[chosung]
+            else:
+                result += char
+        return result
+
+    def _create_stock_completer(self):
+        from PyQt5.QtWidgets import QCompleter
+        from PyQt5.QtCore import QStringListModel
+
+        # 종목명, 코드, 초성 모두 포함한 리스트 생성
+        items = []
+        for _, row in self.stock_df.iterrows():
+            items.append(f"{row['Code']} {row['Name']}")
+            items.append(f"{row['Name']} ({row['Code']})")
+            items.append(row['초성'])
+        model = QStringListModel(list(set(items)))
+        completer = QCompleter(model, self)
+        completer.setCaseSensitivity(Qt.CaseInsensitive)
+        completer.setFilterMode(Qt.MatchContains)
+        return completer
+
+        
+
     def on_table_cell_clicked(self, row, column):
         # 0번 컬럼(티커) 클릭 시 네이버 금융 링크 열기
         if column == 0:
@@ -221,6 +295,7 @@ class StockScannerWindow(QWidget):
                 url = item.data(Qt.UserRole)
                 if url:
                     webbrowser.open(url)
+    
     def show_result(self, df):
         self.scan_btn.setEnabled(True)
         self.status_label.setText(f'검색 완료: {len(df)}개 종목')
