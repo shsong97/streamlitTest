@@ -2,19 +2,19 @@ from PyQt5.QtWidgets import (
     QApplication, QCheckBox, QWidget, QVBoxLayout, QHBoxLayout, 
     QLineEdit, QPushButton, QLabel, QTableWidget, QTableWidgetItem, 
     QHeaderView, QProgressBar, QComboBox, QGroupBox,
-    QStyledItemDelegate
+    QStyledItemDelegate, QCompleter, QStyle, 
 )
-from PyQt5.QtCore import Qt, QThread, pyqtSignal
+from PyQt5.QtCore import Qt, QThread, pyqtSignal, QObject, QStringListModel
 from PyQt5.QtGui import (
-    QStandardItemModel, QStandardItem, QTextDocument
+    QStandardItemModel, QStandardItem, QTextDocument, QColor
 )
 
 import pandas as pd
 import FinanceDataReader as fdr
-import sys, os, datetime, requests, webbrowser, traceback
-              
+import sys, os, datetime, requests, webbrowser, traceback 
+
 # korbacktest.py의 scan_stock_list 함수 임포트
-from korbacktest import _prepare_indicator_df, buy_combos
+from korbacktest import _prepare_indicator_df, run_backtest_and_visualize, buy_combos, sell_combos
 
 # Telegram Bot Token과 Chat ID를 .env 파일에서 읽기
 from dotenv import load_dotenv
@@ -239,16 +239,13 @@ class StockScannerWindow(QWidget):
         else:
             ticker = code
         try:
-            from korbacktest import run_backtest_and_visualize, buy_combos, sell_combos
             run_backtest_and_visualize(ticker, buy_combos=buy_combos, sell_combos=sell_combos, hold_days=5)
         except Exception as e:
-            import traceback
             self.status_label.setText(f'Visual 오류: {e}')
             print(traceback.format_exc())
 
     def _init_stock_loader_thread(self):
-        from PyQt5.QtCore import QThread, pyqtSignal, QObject
-
+        
         class StockLoaderWorker(QObject):
             finished = pyqtSignal(pd.DataFrame)
             def run(self):
@@ -340,9 +337,7 @@ class StockScannerWindow(QWidget):
         return result
 
     def _create_stock_completer(self):
-        from PyQt5.QtWidgets import QCompleter
-        from PyQt5.QtCore import QStringListModel
-
+        
         # 종목명, 코드, 초성 모두 포함한 리스트 생성
         items = []
         for _, row in self.stock_df.iterrows():
@@ -381,43 +376,17 @@ class StockScannerWindow(QWidget):
             self.telegram_btn.setEnabled(True)
             self.download_btn.setEnabled(True)
 
-        self.table.setRowCount(len(df))
-        for i, row in df.iterrows():
-            ticker = str(row.get('ticker', ''))
-            name = str(row.get('name', ''))
-            buy_signal = str(row.get('buy_signal', ''))
-            buy_date = str(row.get('buy_date', ''))
-            # 네이버 금융 차트 링크 생성 (티커에서 코드만 추출)
-            code = ticker.split('.')[0] if '.' in ticker else ticker
-            naver_url = f"https://finance.naver.com/item/fchart.naver?code={code}"
-            code_item = QTableWidgetItem(f"<a href='{naver_url}'>{code}</a>")
-            code_item.setFlags(code_item.flags() & ~Qt.ItemIsEditable)
-            code_item.setData(Qt.UserRole, naver_url)
-            self.table.setItem(i, 0, code_item)
-            self.table.setItem(i, 1, QTableWidgetItem(name))
-            self.table.setItem(i, 2, QTableWidgetItem(buy_signal))
-            self.table.setItem(i, 3, QTableWidgetItem(buy_date))
-            # Visual 버튼 추가
-            from PyQt5.QtWidgets import QPushButton
-            visual_btn = QPushButton('Visual')
-            visual_btn.clicked.connect(lambda _, t=ticker: self.visualize_table_row(t))
-            self.table.setCellWidget(i, 4, visual_btn)
-
-    def visualize_table_row(self, ticker):
-        try:
-            from korbacktest import run_backtest_and_visualize, buy_combos, sell_combos
-            run_backtest_and_visualize(ticker, buy_combos=buy_combos, sell_combos=sell_combos, hold_days=5)
-        except Exception as e:
-            import traceback
-            self.status_label.setText(f'Visual 오류: {e}')
-            print(traceback.format_exc())
-
         # 테이블에서 HTML 링크가 보이도록 delegate 설정
         class HTMLDelegate(QStyledItemDelegate):
             def paint(self, painter, option, index):
                 doc = QTextDocument()
                 doc.setHtml(index.data())
                 painter.save()
+                # 선택된 경우 배경색/글자색 커스텀
+                if option.state & QStyle.State_Selected:
+                    painter.fillRect(option.rect, QColor("#cccccc"))  # 회색 배경
+                    # 글자색도 바꾸고 싶으면 doc.setDefaultStyleSheet("a { color: #d2691e; }") 등 사용
+        
                 painter.translate(option.rect.topLeft())
                 doc.drawContents(painter)
                 painter.restore()
@@ -426,7 +395,44 @@ class StockScannerWindow(QWidget):
                 doc = QTextDocument()
                 doc.setHtml(index.data())
                 return doc.size().toSize()
-        self.table.setItemDelegateForColumn(0, HTMLDelegate(self.table))
+            
+        self.table.setRowCount(len(df))
+        self.table.setStyleSheet("""
+            QTableWidget::item:selected {
+                background: #cccccc;  /* 연회색 */
+                color: #000000;       /* 선택 시 글자색 (필요시) */
+            }
+            """)
+        for i, row in df.iterrows():
+            ticker = str(row.get('ticker', ''))
+            name = str(row.get('name', ''))
+            buy_signal = str(row.get('buy_signal', ''))
+            buy_date = str(row.get('buy_date', ''))
+            # 네이버 금융 차트 링크 생성 (티커에서 코드만 추출)
+            code = ticker.split('.')[0] if '.' in ticker else ticker
+            naver_url = f"https://finance.naver.com/item/fchart.naver?code={code}"
+            code_item = QTableWidgetItem(f"<a href='{naver_url}'>{ticker}</a>")
+            code_item.setFlags(code_item.flags() & ~Qt.ItemIsEditable)
+            code_item.setData(Qt.UserRole, naver_url)
+            self.table.setItem(i, 0, code_item)
+            self.table.setItem(i, 1, QTableWidgetItem(name))
+            self.table.setItem(i, 2, QTableWidgetItem(buy_signal))
+            self.table.setItem(i, 3, QTableWidgetItem(buy_date))
+            # Visual 버튼 추가
+            visual_btn = QPushButton('Visual')
+            visual_btn.clicked.connect(lambda _, t=ticker: self.visualize_table_row(t))
+            self.table.setCellWidget(i, 4, visual_btn)
+            self.table.setItemDelegateForColumn(0, HTMLDelegate(self.table))
+            
+        
+            
+    def visualize_table_row(self, ticker):
+        try:
+            run_backtest_and_visualize(ticker, buy_combos=buy_combos, sell_combos=sell_combos, hold_days=5)
+        except Exception as e:
+            import traceback
+            self.status_label.setText(f'Visual 오류: {e}')
+            print(traceback.format_exc())
 
     def send_telegram(self):
         # 테이블에서 종목코드, 종목명, 매수신호 추출
