@@ -21,7 +21,9 @@ irisdata = st.Page("sample/irisdata.py", title="아이리스 데이터", icon="�
 streamlistteest = st.Page("sample/streamlittest.py", title="스트림리트 테스트", icon="📋")
 pdsample = st.Page("sample/pdsample.py", title="판다스 샘플", icon="📊")
 loginauth = st.Page("pages/loginauth.py", title="로그인 인증", icon="🔒")
+chartvisual = st.Page("pages/charvisual.py", title="Visualize 종목 차트", icon="📈")
 
-pg = st.navigation([loginauth, chartsearch, chart6mo, irisdata, streamlistteest, pdsample])
+pg = st.navigation([loginauth, chartsearch, chart6mo, chartvisual,
+                    irisdata, streamlistteest, pdsample, ])
 st.set_page_config(page_title="Streamlit을 이용한 데이터 분석", page_icon="🐳")
 pg.run()

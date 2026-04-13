@@ -32,9 +32,16 @@
 	- 한국투자증권 OpenAPI 연동(토큰 발급, 랭킹/시세 조회, 토큰 자동 갱신)
 	- KOSIS(통계청) API 연동(인구 등 공공데이터)
 	- yfinance, FinanceDataReader 등으로 국내외 주가 데이터 수집
-- **Streamlit 기반 대시보드**
+- **Streamlit 기반 대시보드/시각화**
+	- 종목 콤보박스(한글명/심볼) 선택 → 실시간 차트/백테스트/시각화 (pages/charvisual.py)
+	- 종목 선택 시 _prepare_indicator_df, run_backtest_and_visualize 자동 호출, Streamlit에서 바로 차트/결과 확인
 	- 종목 차트 검색, 6개월 차트, iris 데이터, pandas 샘플, 로그인 인증 등 다양한 페이지 제공
 	- 파일 기반 회원가입/로그인(암호화 저장)
+- **PyQt 기반 종목 검색/시각화**
+	- pyqt_stock_scanner.py: 종목코드/명/초성 자동완성, 단일검색, Visual 버튼(단일/테이블행별), 테이블 내 네이버금융 HTML 링크, 선택시 배경색/링크색 커스텀 등 다양한 UI 기능
+	- Visual 버튼 클릭 시 run_backtest_and_visualize로 바로 차트 시각화
+	- 테이블 내 각 행별 Visual 버튼, HTMLDelegate로 링크 컬럼만 별도 스타일 적용
+	- 선택 배경색 회색, 링크 컬럼만 별도 색상 적용 등 UI 개선
 - **주식 백테스트/신호 스캔**
 	- RSI, 볼린저밴드, MACD, StochRSI 등 다양한 보조지표 기반 신호 탐지 및 시각화
 	- 테마주(반도체 등) 급등주 조건 스크리닝
