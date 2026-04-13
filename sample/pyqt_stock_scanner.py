@@ -115,7 +115,6 @@ class StockScannerWindow(QWidget):
         view.pressed.connect(self.handle_check)
         model = QStandardItemModel()
         all_item = QStandardItem('전체')
-        # all_item.setCheckable(True)
         all_item.setFlags(Qt.ItemIsEnabled | Qt.ItemIsUserCheckable)
         all_item.setData(Qt.Unchecked, Qt.CheckStateRole)
         model.appendRow(all_item)
@@ -135,7 +134,7 @@ class StockScannerWindow(QWidget):
         option_layout.addWidget(self.count_input)
         self.days_input = QLineEdit(self)
         self.days_input.setPlaceholderText('최근 N일')
-        self.days_input.setText('10')
+        self.days_input.setText('5')
         option_layout.addWidget(QLabel('최근 N일:'))
         option_layout.addWidget(self.days_input)
         self.scan_btn = QPushButton('검색 시작', self)
@@ -156,7 +155,7 @@ class StockScannerWindow(QWidget):
         
         main_layout.addLayout(option_layout)
 
-        # 2번째 줄: 단일검색 위젯
+        # 2번째 줄: 단일검색 위젯 + Visual 버튼
         single_layout = QHBoxLayout()
         self.single_code_input = QLineEdit(self)
         self.single_code_input.setPlaceholderText('종목코드/이름/초성')
@@ -165,16 +164,11 @@ class StockScannerWindow(QWidget):
         self.single_scan_btn = QPushButton('단일검색', self)
         self.single_scan_btn.clicked.connect(self.single_scan)
         single_layout.addWidget(self.single_scan_btn)
+        self.visual_btn = QPushButton('Visual', self)
+        self.visual_btn.clicked.connect(self.visualize_single_stock)
+        single_layout.addWidget(self.visual_btn)
         main_layout.addLayout(single_layout)
 
-        # --- 종목 데이터 및 자동완성 준비 (모든 위젯 생성 후에 실행) ---
-        # self.stock_df = self._load_stock_data()
-        # self.stock_completer = self._create_stock_completer()
-
-        # self.single_code_input.setCompleter(self.stock_completer)
-        # self.stock_completer.activated.connect(self._on_completer_activated)
-
-    
 
         # 진행률 바 (QGroupBox로 감싸서 구분)
         progress_group = QGroupBox('진행 상태')
@@ -210,8 +204,8 @@ class StockScannerWindow(QWidget):
 
         # 결과 테이블
         self.table = QTableWidget(self)
-        self.table.setColumnCount(4)  # 종목코드, 종목명, 매수신호, 매수일
-        self.table.setHorizontalHeaderLabels(['종목코드', '종목명', '매수신호', '매수일'])
+        self.table.setColumnCount(5)  # 종목코드, 종목명, 매수신호, 매수일, Visual
+        self.table.setHorizontalHeaderLabels(['종목코드', '종목명', '매수신호', '매수일', 'Visual'])
         self.table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
         main_layout.addWidget(self.table)
 
@@ -223,6 +217,82 @@ class StockScannerWindow(QWidget):
         self.table.cellClicked.connect(self.on_table_cell_clicked)
 
         self.scan_thread = None
+   
+
+        # --- 종목 데이터 및 자동완성 준비 (비동기 로딩) ---
+        self.stock_df = pd.DataFrame(columns=['Code', 'Name', '초성'])
+        self.stock_completer = None
+        self._init_stock_loader_thread()
+
+
+    def visualize_single_stock(self):
+        code = self.single_code_input.text().strip()
+        if not code:
+            self.status_label.setText('종목코드를 입력하세요.')
+            return
+        market = self.market_combo.currentText().strip().upper()
+        # market에 맞는 티커 생성
+        if market == "KOSPI":
+            ticker = f"{code}.KS"
+        elif market == "KOSDAQ":
+            ticker = f"{code}.KQ"
+        else:
+            ticker = code
+        try:
+            from korbacktest import run_backtest_and_visualize, buy_combos, sell_combos
+            run_backtest_and_visualize(ticker, buy_combos=buy_combos, sell_combos=sell_combos, hold_days=5)
+        except Exception as e:
+            import traceback
+            self.status_label.setText(f'Visual 오류: {e}')
+            print(traceback.format_exc())
+
+    def _init_stock_loader_thread(self):
+        from PyQt5.QtCore import QThread, pyqtSignal, QObject
+
+        class StockLoaderWorker(QObject):
+            finished = pyqtSignal(pd.DataFrame)
+            def run(self):
+                try:
+                    df_kospi = fdr.StockListing('KOSPI')[['Code', 'Name']]
+                    df_kosdaq = fdr.StockListing('KOSDAQ')[['Code', 'Name']]
+                    df = pd.concat([df_kospi, df_kosdaq], ignore_index=True)
+                    df['초성'] = df['Name'].apply(self._get_chosung)
+                    self.finished.emit(df)
+                except Exception as e:
+                    print(f"종목 데이터 로드 실패: {e}")
+                    self.finished.emit(pd.DataFrame(columns=['Code', 'Name', '초성']))
+            def _get_chosung(self, text):
+                CHOSUNG_LIST = [
+                    'ㄱ', 'ㄲ', 'ㄴ', 'ㄷ', 'ㄸ', 'ㄹ', 'ㅁ', 'ㅂ', 'ㅃ', 'ㅅ', 'ㅆ',
+                    'ㅇ', 'ㅈ', 'ㅉ', 'ㅊ', 'ㅋ', 'ㅌ', 'ㅍ', 'ㅎ'
+                ]
+                result = ''
+                for char in text:
+                    if '가' <= char <= '힣':
+                        code = ord(char) - ord('가')
+                        chosung = code // 588
+                        result += CHOSUNG_LIST[chosung]
+                    else:
+                        result += char
+                return result
+
+        self._stock_loader_thread = QThread()
+        self._stock_loader_worker = StockLoaderWorker()
+        self._stock_loader_worker.moveToThread(self._stock_loader_thread)
+        self._stock_loader_thread.started.connect(self._stock_loader_worker.run)
+        self._stock_loader_worker.finished.connect(self._on_stock_data_loaded)
+        self._stock_loader_worker.finished.connect(self._stock_loader_thread.quit)
+        self._stock_loader_worker.finished.connect(self._stock_loader_worker.deleteLater)
+        self._stock_loader_thread.finished.connect(self._stock_loader_thread.deleteLater)
+        self._stock_loader_thread.start()
+
+    def _on_stock_data_loaded(self, df):
+        self.stock_df = df
+        self.stock_completer = self._create_stock_completer()
+        self.single_code_input.setCompleter(self.stock_completer)
+        self.stock_completer.activated.connect(self._on_completer_activated)
+
+     
  
     def _on_completer_activated(self, text):
         # 선택된 텍스트에서 종목코드 추출 후 QLineEdit에 입력
@@ -310,6 +380,7 @@ class StockScannerWindow(QWidget):
         else:
             self.telegram_btn.setEnabled(True)
             self.download_btn.setEnabled(True)
+
         self.table.setRowCount(len(df))
         for i, row in df.iterrows():
             ticker = str(row.get('ticker', ''))
@@ -326,6 +397,20 @@ class StockScannerWindow(QWidget):
             self.table.setItem(i, 1, QTableWidgetItem(name))
             self.table.setItem(i, 2, QTableWidgetItem(buy_signal))
             self.table.setItem(i, 3, QTableWidgetItem(buy_date))
+            # Visual 버튼 추가
+            from PyQt5.QtWidgets import QPushButton
+            visual_btn = QPushButton('Visual')
+            visual_btn.clicked.connect(lambda _, t=ticker: self.visualize_table_row(t))
+            self.table.setCellWidget(i, 4, visual_btn)
+
+    def visualize_table_row(self, ticker):
+        try:
+            from korbacktest import run_backtest_and_visualize, buy_combos, sell_combos
+            run_backtest_and_visualize(ticker, buy_combos=buy_combos, sell_combos=sell_combos, hold_days=5)
+        except Exception as e:
+            import traceback
+            self.status_label.setText(f'Visual 오류: {e}')
+            print(traceback.format_exc())
 
         # 테이블에서 HTML 링크가 보이도록 delegate 설정
         class HTMLDelegate(QStyledItemDelegate):

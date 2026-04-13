@@ -84,6 +84,8 @@ def _prepare_indicator_df(ticker_symbol):
     df = df.sort_index()
     df['MA_5'] = df['Close'].rolling(window=5).mean()
     df['MA_20'] = df['Close'].rolling(window=20).mean()
+    df['MA_60'] = df['Close'].rolling(window=60).mean()
+    df['MA_120'] = df['Close'].rolling(window=120).mean()
 
     mfi_series = ta.mfi(df['High'], df['Low'], df['Close'], df['Volume'], length=14)
     if mfi_series is None or mfi_series.empty:
@@ -442,16 +444,20 @@ buy_combos = [
         "name": "MACD 돌파 매수",
         "signal": lambda d: (d['MACD'] > d['MACD_Signal']) 
                             & (d['MACD'].shift(1) <= d['MACD_Signal'].shift(1))
-                            & (d['MACD'] < 0),  # MACD가 음수 영역에서 Signal을 돌파할 때만 매수
+                            & (d['MACD'] < 0)  # MACD가 음수 영역에서 Signal을 돌파할 때만 매수
+                            & (d['MA_5'] > d['MA_20'])  # 단기 이동평균이 장기 이동평균 위에 있을 때로 조건 강화
+                            # & (d['MA_20'] > d['MA_60'])  # 중기 이동평균이 장기 이동평균 위에 있을 때로 조건 강화
+                            # & (d['Volume'] > d['Volume'].shift(1) * 2)  # 거래량 200% 증가
     },
     
     {
         "name": "추천 검색 조건 조합",
         "signal": lambda d: (
-            ((d['BB_Upper'] - d['BB_Lower']) / d['BB_Middle'] < 0.1)  # 변동성 응축
+            ((d['BB_Upper'] - d['BB_Lower']) / d['BB_Middle'] < 0.2)  # 변동성 응축
             & (d['MACD'] > d['MACD_Signal'])  # MACD 골든크로스
             & (d['Close'] > d['BB_Middle'])   # 중심선 위
             & (d['Volume'] > d['Volume'].shift(1) * 2)  # 거래량 200% 증가
+            # & (d['Close'] > d['MA_60'])  
         ),
     },
     {
@@ -463,6 +469,14 @@ buy_combos = [
                         & (d['Close'].shift(1) > d['Open'].shift(1))  # 오늘과 어제 모두 양봉인 경우로 조건 강화
                         & (d['Volume'] > d['Volume'].shift(1) * 2),  # 오늘 거래량이 어제보다 많은 경우로 조건 강화
 
+    },
+    {
+        "name": "정배열이평", 
+        "signal": lambda d: (d['MA_5'] > d['MA_20'])
+                        & (d['MA_20'] > d['MA_60'])
+                        & (d['MA_5'] < d['MA_20']*1.07 ) # 단기 이동평균이 장기 이동평균보다 너무 멀어지지 않도록 조건 추가(과매수 방지)
+                        & (d['MA_20'] < d['MA_60']*1.07)  # 중기 이동평균이 장기 이동평균보다 너무 멀어지지 않도록 조건 추가(과매수 방지)
+                        & (d['MA_60'] < d['MA_120']*1.07)  # 중장기 이동평균이 장기 이동평균 위에 있을 때로 조건 강화
     },
 ]
 
