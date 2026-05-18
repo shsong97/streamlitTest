@@ -18,7 +18,17 @@ from korbacktest import _prepare_indicator_df, run_backtest_and_visualize, buy_c
 
 # Telegram Bot Token과 Chat ID를 .env 파일에서 읽기
 from dotenv import load_dotenv
-load_dotenv()
+from pathlib import Path
+
+def _load_env():
+    if getattr(sys, 'frozen', False):
+        # dist/StockScanner.app/Contents/MacOS/StockScanner → dist/.env
+        load_dotenv(Path(sys.executable).resolve().parents[3] / '.env')
+    else:
+        load_dotenv(Path(__file__).resolve().parents[1] / '.env')
+    load_dotenv()
+
+_load_env()
 token = os.environ.get('TELEGRAM_BOT_TOKEN')
 chat_id = os.environ.get('TELEGRAM_CHAT_ID')
 
@@ -27,12 +37,13 @@ class ScanThread(QThread):
     error_signal = pyqtSignal(str)
     progress_signal = pyqtSignal(int, int, str, str)  # current, total, code, name
 
-    def __init__(self, market, recent_days, kospi_count, buy_signal_names, parent=None):
+    def __init__(self, market, recent_days, kospi_count, buy_signal_names, include_all, parent=None):
         super().__init__(parent)
         self.market = market
         self.recent_days = recent_days
         self.kospi_count = kospi_count
         self.buy_signal_names = buy_signal_names
+        self.include_all = include_all
 
     def run(self):
         try:
@@ -68,23 +79,38 @@ class ScanThread(QThread):
                     continue
                 buy_dates = []
                 buy_combo_names = []
+                signal_results = []
                 for combo in combos:
                     signal = combo['signal'](df)
                     recent_hits = signal.tail(self.recent_days)
                     hits = list(recent_hits[recent_hits].index)
+                    signal_results.append(bool(hits))
                     if hits:
                         buy_dates.extend(hits)
                         buy_combo_names.append(combo['name'])
-                if buy_dates:
-                    last_buy = max(buy_dates).date().isoformat() if buy_dates else "-"
-                    results.append({
-                        "ticker": ticker,
-                        "name": name,
-                        "buy_signal": ", ".join(buy_combo_names) if buy_combo_names else "-",
-                        "buy_date": last_buy,
-                        "sell_signal": "-",
-                        "sell_date": "-",
-                    })
+                # 체크포함: 모든 시그널이 다 True여야 함
+                if self.include_all:
+                    if all(signal_results) and buy_dates:
+                        last_buy = max(buy_dates).date().isoformat() if buy_dates else "-"
+                        results.append({
+                            "ticker": ticker,
+                            "name": name,
+                            "buy_signal": ", ".join(buy_combo_names) if buy_combo_names else "-",
+                            "buy_date": last_buy,
+                            "sell_signal": "-",
+                            "sell_date": "-",
+                        })
+                else:
+                    if buy_dates:
+                        last_buy = max(buy_dates).date().isoformat() if buy_dates else "-"
+                        results.append({
+                            "ticker": ticker,
+                            "name": name,
+                            "buy_signal": ", ".join(buy_combo_names) if buy_combo_names else "-",
+                            "buy_date": last_buy,
+                            "sell_signal": "-",
+                            "sell_date": "-",
+                        })
             df_result = pd.DataFrame(results)
             self.result_signal.emit(df_result)
         except Exception as e:
@@ -126,6 +152,10 @@ class StockScannerWindow(QWidget):
         self.buy_combo_combo.setModel(model)
         option_layout.addWidget(QLabel('매수신호:'))
         option_layout.addWidget(self.buy_combo_combo)
+        # 체크포함 체크박스 추가
+        self.include_all_checkbox = QCheckBox('체크포함', self)
+        self.include_all_checkbox.setChecked(False)
+        option_layout.addWidget(self.include_all_checkbox)
 
         self.count_input = QLineEdit(self)
         self.count_input.setPlaceholderText('스캔 종목 수')
@@ -581,6 +611,7 @@ class StockScannerWindow(QWidget):
     def start_scan(self):
         market = self.market_combo.currentText().strip().upper()
         buy_signal_names = self.get_selected_buy_signals()
+        include_all = self.include_all_checkbox.isChecked()
         try:
             kospi_count = int(self.count_input.text().strip())
         except Exception:
@@ -595,7 +626,7 @@ class StockScannerWindow(QWidget):
         self.progress_bar.setMaximum(int(self.count_input.text().strip()) if self.count_input.text().strip().isdigit() else 100)
         self.current_code_label.setText('')
         self.scan_btn.setEnabled(False)
-        self.scan_thread = ScanThread(market, recent_days, kospi_count, buy_signal_names)
+        self.scan_thread = ScanThread(market, recent_days, kospi_count, buy_signal_names, include_all)
         self.scan_thread.result_signal.connect(self.show_result)
         self.scan_thread.error_signal.connect(self.show_error)
         self.scan_thread.progress_signal.connect(self.update_progress)
